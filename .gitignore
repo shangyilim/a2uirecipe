@@ -1,0 +1,6 @@
+frontend/node_modules
+recipe_agent/__pycache__
+frontend/dist
+recipe_agent/.env
+recipe_agent/.adk
+__pycache__
