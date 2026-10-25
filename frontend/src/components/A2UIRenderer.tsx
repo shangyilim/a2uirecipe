@@ -11,7 +11,7 @@ import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface Props {
   surface: SurfaceState;
-  onAction?: (action: { type: string; parameters?: Record<string, any> }) => void;
+  onAction?: (action: { type: string; parameters?: Record<string, any>; context?: Record<string, any> }) => void;
 }
 
 export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
@@ -24,32 +24,55 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
     if (value.literalString !== undefined) return value.literalString;
-    if (value.path && surface.dataModel[value.path] !== undefined) {
-      return String(surface.dataModel[value.path]);
+    if (value.literalNumber !== undefined) return String(value.literalNumber);
+    if (value.literalBoolean !== undefined) return String(value.literalBoolean);
+    if (value.path) {
+      const cleanPath = String(value.path).replace(/^\//, '');
+      if (surface.dataModel[cleanPath] !== undefined) {
+        return String(surface.dataModel[cleanPath]);
+      }
+      if (surface.dataModel[value.path] !== undefined) {
+        return String(surface.dataModel[value.path]);
+      }
     }
     return '';
   };
 
+  const getComponentInfo = (item: A2UIComponent): { type: string; props: any } => {
+    if (!item) return { type: '', props: {} };
+    // v0.9: item.component is string (e.g. "Text", "Column", "RecipeSummaryCard")
+    if (typeof item.component === 'string') {
+      return { type: item.component, props: item };
+    }
+    // v0.8: item.component is object (e.g. { Text: { ... } })
+    if (typeof item.component === 'object' && item.component !== null) {
+      const type = Object.keys(item.component)[0] || '';
+      return { type, props: item.component[type] || {} };
+    }
+    return { type: '', props: {} };
+  };
+
+  const getChildIds = (props: any): string[] => {
+    if (Array.isArray(props.children)) {
+      return props.children.map(String);
+    }
+    if (props.children && Array.isArray(props.children.explicitList)) {
+      return props.children.explicitList.map(String);
+    }
+    return [];
+  };
+
   const renderComponent = (componentId: string): ReactNode => {
     const item: A2UIComponent = surface.components[componentId];
-    if (!item || !item.component) return null;
+    if (!item) return null;
 
-    const {
-      Text,
-      Card,
-      Column,
-      Row,
-      Button,
-      Icon,
-      Image,
-      Divider,
-      List,
-    } = item.component;
+    const { type, props } = getComponentInfo(item);
 
     // Text Primitive
-    if (Text) {
-      const textVal = resolveValue(Text.text);
-      switch (Text.usageHint) {
+    if (type === 'Text') {
+      const textVal = resolveValue(props.text ?? props.value);
+      const variant = props.variant || props.usageHint;
+      switch (variant) {
         case 'h1':
           return (
             <h1 key={componentId} className="text-xl font-bold text-slate-900 tracking-tight my-1">
@@ -91,33 +114,37 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
     }
 
     // Card Primitive
-    if (Card) {
+    if (type === 'Card') {
+      const childId = props.child;
       return (
         <DefaultCard key={componentId}>
-          {renderComponent(Card.child)}
+          {childId ? renderComponent(childId) : null}
         </DefaultCard>
       );
     }
 
     // Column Primitive
-    if (Column) {
-      const childrenIds = Column.children.explicitList;
+    if (type === 'Column') {
+      const childrenIds = getChildIds(props);
       const stepItems: { id: string; stepData: any }[] = [];
       const nonStepIds: string[] = [];
 
       for (const id of childrenIds) {
         const comp = surface.components[id];
-        if (comp && (comp.component.InstructionStepCard || comp.component.StepCard)) {
-          stepItems.push({
-            id,
-            stepData: comp.component.InstructionStepCard || comp.component.StepCard,
-          });
-        } else {
-          nonStepIds.push(id);
+        if (comp) {
+          const compInfo = getComponentInfo(comp);
+          if (compInfo.type === 'InstructionStepCard' || compInfo.type === 'StepCard') {
+            stepItems.push({
+              id,
+              stepData: compInfo.props,
+            });
+            continue;
+          }
         }
+        nonStepIds.push(id);
       }
 
-      // If there are multiple step cards, render non-step children first, then the GuidedCookingCard (all steps in 1 single card)
+      // If there are multiple step cards, render non-step children first, then GuidedCookingCard
       if (stepItems.length > 1) {
         const dishName = resolveValue(stepItems[0]?.stepData?.dish);
         const mappedSteps = stepItems.map((item, idx) => ({
@@ -146,13 +173,15 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
     }
 
     // Row Primitive
-    if (Row) {
+    if (type === 'Row') {
+      const childrenIds = getChildIds(props);
+      const justifyAttr = props.justify || props.distribution;
       const justify =
-        Row.distribution === 'spaceBetween'
+        justifyAttr === 'spaceBetween' || justifyAttr === 'space-between'
           ? 'justify-between'
-          : Row.distribution === 'center'
+          : justifyAttr === 'center'
           ? 'justify-center'
-          : Row.distribution === 'end'
+          : justifyAttr === 'end'
           ? 'justify-end'
           : 'justify-start';
 
@@ -161,19 +190,30 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
           key={componentId}
           className={`flex flex-row items-center gap-2.5 ${justify} flex-wrap w-full`}
         >
-          {Row.children.explicitList.map((childId) => renderComponent(childId))}
+          {childrenIds.map((childId) => renderComponent(childId))}
         </div>
       );
     }
 
     // Button Primitive
-    if (Button) {
-      const label = resolveValue(Button.label);
+    if (type === 'Button') {
+      const label = resolveValue(props.label || props.text);
+      const action = props.action;
+      const isBorderless = props.variant === 'borderless';
       return (
         <button
           key={componentId}
-          onClick={() => Button.action && onAction?.(Button.action)}
-          className="inline-flex items-center justify-center px-4 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-xl border border-slate-200 shadow-sm transition-all focus:outline-none"
+          onClick={() => {
+            if (action) {
+              const params = action.context || action.parameters || {};
+              onAction?.({ type: action.type, parameters: params, context: params });
+            }
+          }}
+          className={
+            isBorderless
+              ? 'inline-flex items-center text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition'
+              : 'inline-flex items-center justify-center px-4 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-xl border border-slate-200 shadow-sm transition-all focus:outline-none'
+          }
         >
           {label}
         </button>
@@ -181,172 +221,167 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
     }
 
     // Icon Primitive
-    if (Icon) {
-      const iconName = resolveValue(Icon.name).toLowerCase();
-      const props = { size: Icon.size || 16, className: 'inline-block text-amber-500' };
+    if (type === 'Icon') {
+      const iconName = resolveValue(props.name).toLowerCase();
+      const iconProps = { size: props.size || 16, className: 'inline-block text-amber-500' };
       if (iconName.includes('clock') || iconName.includes('schedule')) {
-        return <Clock key={componentId} {...props} />;
+        return <Clock key={componentId} {...iconProps} />;
       }
       if (iconName.includes('star')) {
-        return <Star key={componentId} {...props} />;
+        return <Star key={componentId} {...iconProps} />;
       }
       if (iconName.includes('flame') || iconName.includes('spicy')) {
-        return <Flame key={componentId} {...props} />;
+        return <Flame key={componentId} {...iconProps} />;
       }
-      return <ChefHat key={componentId} {...props} />;
+      return <ChefHat key={componentId} {...iconProps} />;
     }
 
     // Image Primitive
-    if (Image) {
+    if (type === 'Image') {
       return (
         <img
           key={componentId}
-          src={resolveValue(Image.url)}
-          alt={resolveValue(Image.alt) || 'Recipe'}
+          src={resolveValue(props.url || props.src)}
+          alt={resolveValue(props.alt) || 'Recipe'}
           className="rounded-xl object-cover max-h-52 w-full mb-2 border border-slate-100"
         />
       );
     }
 
     // Divider Primitive
-    if (Divider) {
+    if (type === 'Divider') {
       return <hr key={componentId} className="my-2 border-slate-100" />;
     }
 
     // List Primitive
-    if (List) {
+    if (type === 'List') {
+      const childrenIds = getChildIds(props);
       return (
         <ul key={componentId} className="list-disc pl-5 text-xs text-slate-600 space-y-1">
-          {List.children.explicitList.map((childId) => (
+          {childrenIds.map((childId) => (
             <li key={childId}>{renderComponent(childId)}</li>
           ))}
         </ul>
       );
     }
 
-    // Custom Simplified RecipeSummaryCard Primitive (for recipe list discovery)
-    if (item.component.RecipeSummaryCard) {
-      const summary = item.component.RecipeSummaryCard;
+    // Custom Simplified RecipeSummaryCard Primitive
+    if (type === 'RecipeSummaryCard') {
       return (
         <RecipeSummaryCard
           key={componentId}
-          id={summary.id}
-          name={resolveValue(summary.name)}
-          description={resolveValue(summary.description)}
-          cookTime={resolveValue(summary.cookTime)}
-          prepTime={resolveValue(summary.prepTime)}
-          difficulty={resolveValue(summary.difficulty)}
-          calories={resolveValue(summary.calories)}
-          cuisine={resolveValue(summary.cuisine)}
-          badge={resolveValue(summary.badge)}
-          imageUrl={resolveValue(summary.imageUrl)}
+          id={resolveValue(props.recipeId || props.id) || componentId}
+          name={resolveValue(props.name)}
+          description={resolveValue(props.description)}
+          cookTime={resolveValue(props.cookTime)}
+          prepTime={resolveValue(props.prepTime)}
+          difficulty={resolveValue(props.difficulty)}
+          calories={resolveValue(props.calories)}
+          cuisine={resolveValue(props.cuisine)}
+          badge={resolveValue(props.badge)}
+          imageUrl={resolveValue(props.imageUrl)}
           onAction={onAction}
         />
       );
     }
 
-    // Custom Full RecipeDetailCard Primitive (shown after selecting Let's Cook This)
-    if (item.component.RecipeDetailCard) {
-      const card = item.component.RecipeDetailCard;
+    // Custom Full RecipeDetailCard Primitive
+    if (type === 'RecipeDetailCard') {
       let ingList: string[] = [];
-      if (Array.isArray(card.ingredients)) {
-        ingList = card.ingredients.map((ing) => resolveValue(ing));
-      } else if (card.ingredients && 'path' in card.ingredients && surface.dataModel[card.ingredients.path]) {
-        const fromModel = surface.dataModel[card.ingredients.path];
+      if (Array.isArray(props.ingredients)) {
+        ingList = props.ingredients.map((ing: any) => resolveValue(ing));
+      } else if (props.ingredients && 'path' in props.ingredients && surface.dataModel[props.ingredients.path]) {
+        const fromModel = surface.dataModel[props.ingredients.path];
         ingList = Array.isArray(fromModel) ? fromModel.map(String) : [];
       }
 
       return (
         <RecipeDetailCard
           key={componentId}
-          id={card.id}
-          name={resolveValue(card.name)}
-          description={resolveValue(card.description)}
-          prepTime={resolveValue(card.prepTime)}
-          cookTime={resolveValue(card.cookTime)}
-          servings={resolveValue(card.servings)}
-          difficulty={resolveValue(card.difficulty)}
-          calories={resolveValue(card.calories)}
-          cuisine={resolveValue(card.cuisine)}
-          badge={resolveValue(card.badge)}
-          imageUrl={resolveValue(card.imageUrl)}
+          id={resolveValue(props.recipeId || props.id) || componentId}
+          name={resolveValue(props.name)}
+          description={resolveValue(props.description)}
+          prepTime={resolveValue(props.prepTime)}
+          cookTime={resolveValue(props.cookTime)}
+          servings={resolveValue(props.servings)}
+          difficulty={resolveValue(props.difficulty)}
+          calories={resolveValue(props.calories)}
+          cuisine={resolveValue(props.cuisine)}
+          badge={resolveValue(props.badge)}
+          imageUrl={resolveValue(props.imageUrl)}
           ingredients={ingList}
-          showCookButton={card.showCookButton ?? true}
+          showCookButton={props.showCookButton ?? true}
           onAction={onAction}
         />
       );
     }
 
     // Custom CookingTimer Primitive
-    if (item.component.CookingTimer) {
-      const timer = item.component.CookingTimer;
+    if (type === 'CookingTimer') {
       return (
         <CookingTimer
           key={componentId}
-          minutes={resolveValue(timer.minutes) || 5}
-          label={resolveValue(timer.label)}
-          dish={resolveValue(timer.dish)}
+          minutes={resolveValue(props.minutes) || 5}
+          label={resolveValue(props.label)}
+          dish={resolveValue(props.dish)}
         />
       );
     }
 
-    // Custom InstructionStepCard Primitive (for guided cooking steps, with optional live timer)
-    if (item.component.InstructionStepCard || item.component.StepCard) {
-      const stepData = item.component.InstructionStepCard || item.component.StepCard;
+    // Custom InstructionStepCard Primitive
+    if (type === 'InstructionStepCard' || type === 'StepCard') {
       return (
         <InstructionStepCard
           key={componentId}
-          step={resolveValue(stepData.step)}
-          totalSteps={resolveValue(stepData.totalSteps)}
-          title={resolveValue(stepData.title)}
-          instruction={resolveValue(stepData.instruction || stepData.text || stepData.description)}
-          duration={resolveValue(stepData.duration)}
-          timerMinutes={resolveValue(stepData.timerMinutes || stepData.minutes)}
-          dish={resolveValue(stepData.dish)}
-          tip={resolveValue(stepData.tip)}
-          isLastStep={Boolean(stepData.isLastStep)}
+          step={resolveValue(props.step)}
+          totalSteps={resolveValue(props.totalSteps)}
+          title={resolveValue(props.title)}
+          instruction={resolveValue(props.instruction || props.text || props.description)}
+          duration={resolveValue(props.duration)}
+          timerMinutes={resolveValue(props.timerMinutes || props.minutes)}
+          dish={resolveValue(props.dish)}
+          tip={resolveValue(props.tip)}
+          isLastStep={Boolean(props.isLastStep)}
           onAction={onAction}
         />
       );
     }
 
-    // Custom GuidedCookingCard Primitive (all steps in 1 single card with Next/Previous navigation)
-    if (item.component.GuidedCookingCard) {
-      const gcc = item.component.GuidedCookingCard;
+    // Custom GuidedCookingCard Primitive
+    if (type === 'GuidedCookingCard') {
       return (
         <GuidedCookingCard
           key={componentId}
-          dish={resolveValue(gcc.dish || gcc.recipeName)}
-          steps={gcc.steps || []}
+          dish={resolveValue(props.dish || props.recipeName)}
+          steps={props.steps || []}
           onAction={onAction}
         />
       );
     }
 
     // Custom DefaultCard Primitive
-    if (item.component.DefaultCard) {
-      const cardData = item.component.DefaultCard;
+    if (type === 'DefaultCard') {
       return (
         <DefaultCard
           key={componentId}
-          title={resolveValue(cardData.title)}
-          text={resolveValue(cardData.text || cardData.content || cardData.body)}
+          title={resolveValue(props.title)}
+          text={resolveValue(props.text || props.content || props.body)}
         />
       );
     }
 
-    // Fallback if no other specialized cards can be used: render default card with formatted markdown!
+    // Fallback if no specialized card matched: render default card
     const fallbackText =
-      resolveValue(item.component?.text) ||
-      resolveValue(item.component?.content) ||
-      resolveValue(item.component?.message) ||
-      resolveValue(item.component?.description);
+      resolveValue(props.text) ||
+      resolveValue(props.content) ||
+      resolveValue(props.message) ||
+      resolveValue(props.description);
 
     if (fallbackText) {
       return (
         <DefaultCard
           key={componentId}
-          title={resolveValue(item.component?.title)}
+          title={resolveValue(props.title)}
           text={fallbackText}
         />
       );

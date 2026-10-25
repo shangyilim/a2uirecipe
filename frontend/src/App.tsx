@@ -55,13 +55,14 @@ export default function App() {
     }
   };
 
-  const handleAction = (action: { type: string; parameters?: Record<string, any> }) => {
+  const handleAction = (action: { type: string; parameters?: Record<string, any>; context?: Record<string, any> }) => {
+    const params = action.context || action.parameters || {};
     if (action.type === 'view_recipe') {
-      handleSend(`Please show me the full recipe details and ingredients for ${action.parameters?.recipe_name}.`);
+      handleSend(`Please show me the full recipe details and ingredients for ${params.recipe_name}.`);
       return;
     }
     if (action.type === 'start_cooking') {
-      handleSend(`Let's cook the ${action.parameters?.recipe_name}. Guide me with the cooking steps!`);
+      handleSend(`Let's cook the ${params.recipe_name}. Guide me with the cooking steps!`);
       return;
     }
     if (action.type === 'next_step') {
@@ -69,11 +70,11 @@ export default function App() {
       return;
     }
     if (action.type === 'finish_cooking') {
-      handleSend(`I've completed all cooking steps for ${action.parameters?.recipe_name || 'this dish'}! How should I plate and serve it?`);
+      handleSend(`I've completed all cooking steps for ${params.recipe_name || 'this dish'}! How should I plate and serve it?`);
       return;
     }
-    const actionPrompt = action.parameters?.recipe_name
-      ? `Let's cook the ${action.parameters.recipe_name}. Guide me step by step!`
+    const actionPrompt = params.recipe_name
+      ? `Let's cook the ${params.recipe_name}. Guide me step by step!`
       : `I selected action: ${action.type}`;
     handleSend(actionPrompt);
   };

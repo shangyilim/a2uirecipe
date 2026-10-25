@@ -141,15 +141,70 @@ export class AdkService {
   private applyMessages(surface: SurfaceState, messages: any[]) {
     for (const msg of messages) {
       if (!msg) continue;
+
+      // v0.9 & v0.9.1 createSurface (scoped to active surfaces)
+      if ('createSurface' in msg && msg.createSurface) {
+        surface.surfaceId = msg.createSurface.surfaceId || surface.surfaceId;
+        surface.rootId = null;
+        surface.components = {};
+        surface.dataModel = {};
+      }
+
+      // v0.9 & v0.9.1 deleteSurface (removes active surface, enabling ID reuse)
+      if ('deleteSurface' in msg && msg.deleteSurface) {
+        const delId = msg.deleteSurface.surfaceId;
+        if (!delId || delId === surface.surfaceId) {
+          surface.rootId = null;
+          surface.components = {};
+          surface.dataModel = {};
+        }
+      }
+
+      // v0.9 & v0.9.1 updateComponents
+      if ('updateComponents' in msg && msg.updateComponents) {
+        if (msg.updateComponents.surfaceId) {
+          surface.surfaceId = msg.updateComponents.surfaceId;
+        }
+        for (const comp of msg.updateComponents.components || []) {
+          if (comp?.id) {
+            surface.components[comp.id] = comp;
+            if (comp.id === 'root') {
+              surface.rootId = 'root';
+            }
+          }
+        }
+      }
+
+      // v0.9 updateDataModel
+      if ('updateDataModel' in msg && msg.updateDataModel) {
+        const val = msg.updateDataModel.value;
+        const path = msg.updateDataModel.path;
+        if (val && typeof val === 'object') {
+          if (!path || path === '/' || path === '') {
+            Object.assign(surface.dataModel, val);
+          } else {
+            const cleanPath = path.replace(/^\//, '');
+            surface.dataModel[cleanPath] = val;
+          }
+        }
+      }
+
+      // v0.8 legacy beginRendering
       if ('beginRendering' in msg && msg.beginRendering) {
         surface.surfaceId = msg.beginRendering.surfaceId || surface.surfaceId;
         surface.rootId = msg.beginRendering.root || surface.rootId;
       }
+
+      // v0.8 legacy surfaceUpdate
       if ('surfaceUpdate' in msg && msg.surfaceUpdate) {
         for (const comp of msg.surfaceUpdate.components || []) {
-          surface.components[comp.id] = comp;
+          if (comp?.id) {
+            surface.components[comp.id] = comp;
+          }
         }
       }
+
+      // v0.8 legacy dataModelUpdate
       if ('dataModelUpdate' in msg && msg.dataModelUpdate) {
         for (const item of msg.dataModelUpdate.contents || []) {
           surface.dataModel[item.key] =
@@ -157,35 +212,41 @@ export class AdkService {
         }
       }
 
-      // Also support direct format: { surfaceId, root, components: [...] }
+      // Direct components list format: { surfaceId, root?, components: [...] }
       if (Array.isArray(msg.components)) {
         for (const comp of msg.components) {
           if (comp?.id) {
             surface.components[comp.id] = comp;
+            if (comp.id === 'root') {
+              surface.rootId = 'root';
+            }
           }
         }
         if (msg.surfaceId) {
           surface.surfaceId = msg.surfaceId;
         }
-        if (!surface.rootId) {
-          if (msg.root) {
-            surface.rootId = msg.root;
-          } else if (surface.components['root-column']) {
-            surface.rootId = 'root-column';
-          } else if (surface.components['main-column']) {
-            surface.rootId = 'main-column';
-          } else if (msg.components.length > 0 && msg.components[0]?.id) {
-            surface.rootId = msg.components[0].id;
-          }
+        if (!surface.rootId && msg.root) {
+          surface.rootId = msg.root;
         }
       }
     }
 
-    // Fallback: if components exist but no rootId is set, find the first Column or first component
-    if (!surface.rootId && Object.keys(surface.components).length > 0) {
+    // Resolve rootId:
+    // 1. v0.9 specification: exactly one component with id "root"
+    if (surface.components['root']) {
+      surface.rootId = 'root';
+    } else if (!surface.rootId && Object.keys(surface.components).length > 0) {
+      // 2. Fallbacks for named containers or first component
       const keys = Object.keys(surface.components);
-      const columnKey = keys.find((k) => surface.components[k]?.component?.Column);
-      surface.rootId = columnKey || keys[0];
+      const rootCandidate = keys.find((k) => {
+        const comp = surface.components[k];
+        if (!comp) return false;
+        if (k === 'root-column' || k === 'main-column') return true;
+        if (comp.component === 'Column') return true;
+        if (typeof comp.component === 'object' && comp.component !== null && 'Column' in comp.component) return true;
+        return false;
+      });
+      surface.rootId = rootCandidate || keys[0];
     }
   }
 }

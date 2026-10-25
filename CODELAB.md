@@ -267,9 +267,9 @@ Start the ADK web development server:
 
 ---
 
-## 5. Stage 2: Generate Structured A2UI JSON
+## 5. Stage 2: Generate Structured A2UI JSON (v0.9.1)
 
-Instead of generating unstructured text, we teach the LLM how to output **A2UI JSON**. 
+Instead of generating unstructured text, we teach the LLM how to output **A2UI v0.9.1 JSON**. 
 
 The `a2ui-agent-sdk` includes a `prompt_generator` that injects the complete A2UI JSON schema, standard component specs, and few-shot formatting rules into the agent's instructions.
 
@@ -288,7 +288,7 @@ from a2ui.inference_formats.direct_json import DirectJsonFormat
 from .recipes import get_recipes
 
 a2ui_format = DirectJsonFormat(
-    catalogs=[BasicCatalog("0.8")],
+    catalogs=[BasicCatalog("0.9.1")],
 )
 
 instruction = a2ui_format.prompt_generator.generate(
@@ -298,15 +298,14 @@ instruction = a2ui_format.prompt_generator.generate(
         "the current state."
     ),
     workflow_description=(
-        "Analyze the user's request and return structured UI when appropriate."
+        "Analyze the user's request and return structured A2UI v0.9.1 UI when appropriate."
     ),
     ui_description=(
-        "Use cards for recipe summaries, rows and columns for comparisons, "
-        "icons for cook time and difficulty indicators, and buttons for cooking actions. "
-        "Do NOT use markdown formatting in text values. Use the usageHint "
-        "property for heading levels instead. "
-        "Respond ONLY with the A2UI JSON array. Do NOT include any text "
-        "outside the JSON. Put all explanations into Text components."
+        "The first component in 'components' MUST have id 'root'. "
+        "Use flat v0.9.1 components where 'component' is a string discriminator (e.g. 'Column', 'Text', 'Button'). "
+        "Use 'children' array with component IDs, 'justify' instead of distribution, 'align' instead of alignment, "
+        "and 'variant' instead of usageHint. Put text directly as strings. "
+        "Respond ONLY with the A2UI JSON array inside <a2ui-json> and </a2ui-json> tags."
     ),
     include_schema=True,
     include_examples=True,
@@ -347,105 +346,121 @@ root_agent = Agent(
    ```text
    What can I make for dinner tonight?
    ```
-3. **Observation**: The response now outputs structured JSON showing A2UI messages (`beginRendering`, `surfaceUpdate`, `dataModelUpdate`).
+3. **Observation**: The response now outputs structured JSON showing A2UI v0.9 messages (`createSurface`, `updateComponents`, `updateDataModel`).
 
 ---
 
-## 6. Understanding the A2UI Architecture
+## 6. Understanding the A2UI v0.9 & v0.9.1 Architecture
 
-Look closely at the JSON produced in Stage 2. A2UI uses three message types:
+Look closely at the JSON produced in Stage 2. A2UI v0.9 and v0.9.1 represent significant evolutionary steps over v0.8.1, shifting from rigid, deeply nested "Structured Output First" schemas to a clean, token-efficient **"Prompt-First"** architecture designed for modern LLMs:
 
-### 1. `beginRendering`
-Declares the active rendering surface and points to the root component ID:
+### 1. `createSurface` (Replaces `beginRendering`)
+Signals the client to create a surface and prepare for rendering:
 ```json
 {
-  "beginRendering": {
+  "version": "v0.9.1",
+  "createSurface": {
     "surfaceId": "default",
-    "root": "recipe-column"
+    "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
   }
 }
 ```
+> **Root Rule in v0.9+**: The legacy `"root"` property in `beginRendering` is removed. The root container is explicitly declared by having exactly one component with `"id": "root"` in `updateComponents`.
 
-### 2. `surfaceUpdate`
-Defines the visual hierarchy as a **flat array of components** (not deeply nested trees):
+### 2. `updateComponents` (Replaces `surfaceUpdate`)
+Declares components using a **flat discriminator model** (`component: "<Type>"`) where attributes live directly on the component object rather than wrapped under nested keys:
 ```json
 {
-  "surfaceUpdate": {
+  "version": "v0.9.1",
+  "updateComponents": {
     "surfaceId": "default",
     "components": [
       {
-        "id": "recipe-column",
-        "component": {
-          "Column": {
-            "children": { "explicitList": ["header-text", "carbonara-card"] }
-          }
-        }
+        "id": "root",
+        "component": "Column",
+        "children": ["header-text", "carbonara-card"],
+        "justify": "start"
       },
       {
         "id": "header-text",
-        "component": {
-          "Text": {
-            "text": { "literalString": "Recommended Dinner Recipes" },
-            "usageHint": "h1"
-          }
-        }
+        "component": "Text",
+        "text": "Recommended Dinner Recipes",
+        "variant": "h1"
       },
       {
         "id": "carbonara-card",
-        "component": {
-          "Card": { "child": "carbonara-body" }
-        }
+        "component": "Card",
+        "child": "carbonara-body"
       },
       {
         "id": "carbonara-body",
-        "component": {
-          "Column": {
-            "children": { "explicitList": ["recipe-title", "cook-button"] }
-          }
-        }
+        "component": "Column",
+        "children": ["recipe-title", "cook-button"]
       },
       {
         "id": "recipe-title",
-        "component": {
-          "Text": { "text": { "path": "recipe_name" }, "usageHint": "h2" }
-        }
+        "component": "Text",
+        "text": "Classic Roman Carbonara",
+        "variant": "h2"
       },
       {
         "id": "cook-button",
-        "component": {
-          "Button": {
-            "label": { "literalString": "Start Cooking" },
-            "action": { "type": "start_cook" }
-          }
+        "component": "Button",
+        "label": "Start Cooking",
+        "variant": "primary",
+        "action": {
+          "type": "start_cooking",
+          "context": { "recipe_name": "Classic Roman Carbonara" }
         }
       }
     ]
   }
 }
 ```
-*Why flat?* A flat list with ID references makes streaming, partial updates, and validation fast and resilient against LLM generation errors.
 
-### 3. `dataModelUpdate`
-Separates dynamic content from layout structure:
+### 3. `updateDataModel` (Replaces `dataModelUpdate`)
+Uses natural JSON key-value maps with upsert semantics, rather than verbose typed adjacency lists:
 ```json
 {
-  "dataModelUpdate": {
+  "version": "v0.9.1",
+  "updateDataModel": {
     "surfaceId": "default",
-    "contents": [
-      { "key": "recipe_name", "valueString": "Classic Roman Carbonara" },
-      { "key": "cook_time", "valueString": "15 mins" }
-    ]
+    "value": {
+      "recipe_name": "Classic Roman Carbonara",
+      "cook_time": "15 mins"
+    }
   }
 }
 ```
 
-### The 18 Primitives Catalog
-| Category | Supported Primitives | Recipe Use Case |
-| :--- | :--- | :--- |
-| **Layout** | `Card`, `Column`, `Row`, `List`, `Tabs`, `Divider`, `Modal` | Recipe cards, two-column ingredient lists, instruction tabs |
-| **Display** | `Text`, `Image`, `Icon`, `Video`, `AudioPlayer` | Recipe photos, prep time icons (`schedule`), ratings (`star`) |
-| **Input** | `TextField`, `DateTimeInput`, `MultipleChoice`, `CheckBox`, `Slider` | Portion size sliders, dietary filters, pantry ingredient inputs |
-| **Action** | `Button` | "Start Step-by-Step", "Add to Grocery List" |
+### 4. `deleteSurface` (v0.9.1 Active Surface Scoping)
+In v0.9.1, surface IDs are scoped to **currently active surfaces** rather than being strictly unique across the entire lifetime of the renderer. When a surface is deleted via `deleteSurface`, its ID can be safely reused for future interactions:
+```json
+{
+  "version": "v0.9.1",
+  "deleteSurface": {
+    "surfaceId": "default"
+  }
+}
+```
+
+### v0.8.1 vs v0.9 vs v0.9.1 Migration Quick Reference
+
+| Feature | v0.8.1 (Legacy) | v0.9 (Evolution) | v0.9.1 (Standardized) |
+| :--- | :--- | :--- | :--- |
+| **MIME Type** | `application/json` | `application/json+a2ui` (draft) | **`application/a2ui+json`** (standardized) |
+| **Surface ID Scope** | Lifetime of renderer | Lifetime of renderer | **Currently active surfaces** (reuse after `deleteSurface`) |
+| **Component Format** | Nested: `{ "component": { "Text": {...} } }` | Flat: `{ "component": "Text", ... }` | Flat: `{ "component": "Text", ... }` |
+| **Surface Creation** | `beginRendering: { surfaceId, root }` | `createSurface: { surfaceId, catalogId }` | `createSurface: { surfaceId, catalogId }` |
+| **Root Convention** | Parameter in `beginRendering` | Component with `"id": "root"` | Component with `"id": "root"` |
+| **Component Updates** | `surfaceUpdate: { components }` | `updateComponents: { components }` | `updateComponents: { components }` |
+| **Data Updates** | `dataModelUpdate: { contents: [{key, valueString}] }` | `updateDataModel: { value: {...} }` | `updateDataModel: { value: {...} }` |
+| **Child Lists** | `children: { explicitList: ["id1", "id2"] }` | `children: ["id1", "id2"]` | `children: ["id1", "id2"]` |
+| **String Values** | `{ literalString: "Hello" }` | Natural `"Hello"` | Natural `"Hello"` |
+| **Button Action Context**| `context: [{ key, value: { literalString } }]` | Standard map: `context: {...}` | Standard map: `context: {...}` |
+| **Button Style** | `primary: true` | `variant: "primary" \| "borderless"` | `variant: "primary" \| "borderless"` |
+| **Layout Properties**| `distribution`, `alignment` | `justify`, `align` | `justify`, `align` |
+| **Text Styling** | `usageHint: "h1"` | `variant: "h1"` | `variant: "h1"` |
 
 ---
 
@@ -496,8 +511,10 @@ MANDATORY_TOOL_INSTRUCTIONS = (
 # ==============================================================================
 # Stages 2 & 3: A2UI Schema & Prompt Generation
 # ==============================================================================
+# Stages 2 & 3: A2UI Schema & Prompt Generation
+# ==============================================================================
 a2ui_format = DirectJsonFormat(
-    catalogs=[BasicCatalog("0.8")],
+    catalogs=[BasicCatalog("0.9.1")],
 )
 
 a2ui_instruction = a2ui_format.prompt_generator.generate(
@@ -511,10 +528,10 @@ a2ui_instruction = a2ui_format.prompt_generator.generate(
         "1. RECIPE RETRIEVAL (MANDATORY):\n"
         "When the user asks for recipes, all recipes, or meal ideas, ALWAYS call get_recipes first.\n\n"
         "2. STAGE A - RECIPE LIST / DISCOVERY:\n"
-        "After receiving the recipes from get_recipes, present them using simplified 'RecipeSummaryCard' components inside a Column. "
+        "After receiving recipes from get_recipes, present them using 'RecipeSummaryCard' components inside a Column root container. "
         "Each card features the recipe's title, cooking stats, badge, authentic image_url from the tool, a 'View' button, and a 'Let\'s Cook This' button.\n\n"
         "3. STAGE B - RECIPE DETAILS:\n"
-        "When the user clicks 'View' (or asks for full details/ingredients of a recipe), render the full 'RecipeDetailCard' with complete ingredients. "
+        "When the user clicks 'View' (or asks for full details/ingredients of a recipe), render the full 'RecipeDetailCard' with complete ingredients list. "
         "The RecipeDetailCard includes the 'Let\'s Cook This' button so the user can start step-by-step guided cooking.\n\n"
         "4. STAGE C - STEP-BY-STEP GUIDED COOKING (ALL STEPS IN 1 SINGLE CARD):\n"
         "When the user clicks 'Let\'s Cook This' or asks to cook/prepare a dish:\n"
@@ -524,107 +541,104 @@ a2ui_instruction = a2ui_format.prompt_generator.generate(
         "- For GENERAL instructions (prep, whisking, chopping, tossing, seasoning, plating): omit timerMinutes so it displays a clean, focused instruction card.\n"
     ),
     ui_description=(
-        "Construct rich A2UI surfaces following these rules:\n"
+        "Construct rich A2UI v0.9.1 surfaces following these rules:\n"
         "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
-        "2. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
+        "2. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
+        "3. FLAT V0.9.1 COMPONENT MODEL: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object (not nested under a type key).\n\n"
+        "4. Root Container Example:\n"
+        "{\n"
+        '  "id": "root",\n'
+        '  "component": "Column",\n'
+        '  "children": ["recipe-summary-1", "recipe-summary-2"],\n'
+        '  "justify": "start"\n'
+        "}\n\n"
+        "5. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
         "{\n"
         '  "id": "recipe-summary-<id>",\n'
-        '  "component": {\n'
-        '    "RecipeSummaryCard": {\n'
-        '      "id": "<recipe.id>",\n'
-        '      "name": "<recipe.name>",\n'
-        '      "description": "<recipe.description>",\n'
-        '      "cookTime": "<recipe.cook_time>",\n'
-        '      "prepTime": "<recipe.prep_time>",\n'
-        '      "difficulty": "<recipe.difficulty>",\n'
-        '      "calories": "<recipe.calories>",\n'
-        '      "cuisine": "<recipe.cuisine>",\n'
-        '      "badge": "<recipe.badge>",\n'
-        '      "imageUrl": "<recipe.image_url>"\n'
-        '    }\n'
-        '  }\n'
+        '  "component": "RecipeSummaryCard",\n'
+        '  "recipeId": "<recipe.id>",\n'
+        '  "name": "<recipe.name>",\n'
+        '  "description": "<recipe.description>",\n'
+        '  "cookTime": "<recipe.cook_time>",\n'
+        '  "prepTime": "<recipe.prep_time>",\n'
+        '  "difficulty": "<recipe.difficulty>",\n'
+        '  "calories": "<recipe.calories>",\n'
+        '  "cuisine": "<recipe.cuisine>",\n'
+        '  "badge": "<recipe.badge>",\n'
+        '  "imageUrl": "<recipe.image_url>"\n'
         "}\n\n"
-        "3. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
+        "6. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
         "{\n"
         '  "id": "recipe-detail-<id>",\n'
-        '  "component": {\n'
-        '    "RecipeDetailCard": {\n'
-        '      "id": "<recipe.id>",\n'
-        '      "name": "<recipe.name>",\n'
-        '      "description": "<recipe.description>",\n'
-        '      "prepTime": "<recipe.prep_time>",\n'
-        '      "cookTime": "<recipe.cook_time>",\n'
-        '      "servings": <recipe.servings>,\n'
-        '      "difficulty": "<recipe.difficulty>",\n'
-        '      "calories": "<recipe.calories>",\n'
-        '      "cuisine": "<recipe.cuisine>",\n'
-        '      "badge": "<recipe.badge>",\n'
-        '      "imageUrl": "<recipe.image_url>",\n'
-        '      "ingredients": <recipe.ingredients>,\n'
-        '      "showCookButton": true\n'
-        '    }\n'
-        '  }\n'
+        '  "component": "RecipeDetailCard",\n'
+        '  "recipeId": "<recipe.id>",\n'
+        '  "name": "<recipe.name>",\n'
+        '  "description": "<recipe.description>",\n'
+        '  "prepTime": "<recipe.prep_time>",\n'
+        '  "cookTime": "<recipe.cook_time>",\n'
+        '  "servings": <recipe.servings>,\n'
+        '  "difficulty": "<recipe.difficulty>",\n'
+        '  "calories": "<recipe.calories>",\n'
+        '  "cuisine": "<recipe.cuisine>",\n'
+        '  "badge": "<recipe.badge>",\n'
+        '  "imageUrl": "<recipe.image_url>",\n'
+        '  "ingredients": <recipe.ingredients>,\n'
+        '  "showCookButton": true\n'
         "}\n\n"
-        "4. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
+        "7. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
         "Bundle ALL steps for the recipe in a single GuidedCookingCard so the user navigates locally with Next and Previous buttons:\n"
         "{\n"
         '  "id": "guided-cooking-1",\n'
-        '  "component": {\n'
-        '    "GuidedCookingCard": {\n'
+        '  "component": "GuidedCookingCard",\n'
+        '  "dish": "Classic Roman Carbonara",\n'
+        '  "steps": [\n'
+        '    {\n'
+        '      "step": 1,\n'
+        '      "title": "Boil Pasta until Al Dente",\n'
+        '      "instruction": "Bring a large pot of salted water to a gentle boil and cook spaghetti until al dente.",\n'
+        '      "duration": "10 mins",\n'
+        '      "timerMinutes": 10,\n'
         '      "dish": "Classic Roman Carbonara",\n'
-        '      "steps": [\n'
-        '        {\n'
-        '          "step": 1,\n'
-        '          "title": "Boil Pasta until Al Dente",\n'
-        '          "instruction": "Bring a large pot of salted water to a gentle boil and cook spaghetti until al dente.",\n'
-        '          "duration": "10 mins",\n'
-        '          "timerMinutes": 10,\n'
-        '          "dish": "Classic Roman Carbonara",\n'
-        '          "tip": "Save 1/2 cup of starchy pasta water before draining!"\n'
-        '        },\n'
-        '        {\n'
-        '          "step": 2,\n'
-        '          "title": "Crisp the Guanciale",\n'
-        '          "instruction": "In a large skillet, cook sliced guanciale over medium heat until golden and crispy.",\n'
-        '          "duration": "5 mins",\n'
-        '          "timerMinutes": 5,\n'
-        '          "dish": "Classic Roman Carbonara",\n'
-        '          "tip": "Render fat slowly for extra crunch."\n'
-        '        },\n'
-        '        {\n'
-        '          "step": 3,\n'
-        '          "title": "Whisk Egg and Cheese Mixture",\n'
-        '          "instruction": "In a bowl, whisk whole eggs, egg yolks, grated Pecorino Romano, and freshly cracked black pepper.",\n'
-        '          "dish": "Classic Roman Carbonara",\n'
-        '          "tip": "Whisk until a thick, creamy paste forms."\n'
-        '        },\n'
-        '        {\n'
-        '          "step": 4,\n'
-        '          "title": "Combine Pasta and Guanciale",\n'
-        '          "instruction": "Transfer al dente pasta into the skillet with guanciale and toss to coat in rendered fat off the heat.",\n'
-        '          "dish": "Classic Roman Carbonara"\n'
-        '        },\n'
-        '        {\n'
-        '          "step": 5,\n'
-        '          "title": "Emulsify Carbonara Sauce",\n'
-        '          "instruction": "Off the heat, quickly pour in egg mixture while vigorously tossing pasta. Splash reserved pasta water as needed to create a glossy sauce.",\n'
-        '          "dish": "Classic Roman Carbonara",\n'
-        '          "tip": "Keep skillet off heat to prevent eggs from scrambling!"\n'
-        '        }\n'
-        '      ]\n'
+        '      "tip": "Save 1/2 cup of starchy pasta water before draining!"\n'
+        '    },\n'
+        '    {\n'
+        '      "step": 2,\n'
+        '      "title": "Crisp the Guanciale",\n'
+        '      "instruction": "In a large skillet, cook sliced guanciale over medium heat until golden and crispy.",\n'
+        '      "duration": "5 mins",\n'
+        '      "timerMinutes": 5,\n'
+        '      "dish": "Classic Roman Carbonara",\n'
+        '      "tip": "Render fat slowly for extra crunch."\n'
+        '    },\n'
+        '    {\n'
+        '      "step": 3,\n'
+        '      "title": "Whisk Egg and Cheese Mixture",\n'
+        '      "instruction": "In a bowl, whisk whole eggs, egg yolks, grated Pecorino Romano, and freshly cracked black pepper.",\n'
+        '      "dish": "Classic Roman Carbonara",\n'
+        '      "tip": "Whisk until a thick, creamy paste forms."\n'
+        '    },\n'
+        '    {\n'
+        '      "step": 4,\n'
+        '      "title": "Combine Pasta and Guanciale",\n'
+        '      "instruction": "Transfer al dente pasta into the skillet with guanciale and toss to coat in rendered fat off the heat.",\n'
+        '      "dish": "Classic Roman Carbonara"\n'
+        '    },\n'
+        '    {\n'
+        '      "step": 5,\n'
+        '      "title": "Emulsify Carbonara Sauce",\n'
+        '      "instruction": "Off the heat, quickly pour in egg mixture while vigorously tossing pasta. Splash reserved pasta water as needed to create a glossy sauce.",\n'
+        '      "dish": "Classic Roman Carbonara",\n'
+        '      "tip": "Keep skillet off heat to prevent eggs from scrambling!"\n'
         '    }\n'
-        '  }\n'
+        '  ]\n'
         "}\n\n"
-        "5. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
-        "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown (bullet lists, bold text, headings, code):\n"
+        "8. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
+        "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown:\n"
         "{\n"
         '  "id": "info-card-1",\n'
-        '  "component": {\n'
-        '    "DefaultCard": {\n'
-        '      "title": "Chef\'s Tip & Dietary Notes",\n'
-        '      "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and pasta water provides all the richness.\\n- **Toast the pepper**: Toasted black pepper releases maximum aroma."\n'
-        '    }\n'
-        '  }\n'
+        '  "component": "DefaultCard",\n'
+        '  "title": "Chef\'s Tip & Dietary Notes",\n'
+        '  "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and starchy water creates the silky texture.\\n- **Toast the pepper**: Toasted black pepper releases fragrant essential oils."\n'
         "}\n\n"
         "Wrap your A2UI JSON array inside <a2ui-json> and </a2ui-json> tags."
     ),
