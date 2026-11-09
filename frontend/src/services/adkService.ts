@@ -1,6 +1,6 @@
 import { SurfaceState } from '../types/a2ui';
 
-const ADK_BASE_URL = 'http://127.0.0.1:8080';
+const ADK_BASE_URL = (import.meta as any).env?.VITE_ADK_URL || 'http://127.0.0.1:8080';
 const USER_ID = 'demo_user';
 
 export interface ChatMessage {
@@ -31,10 +31,10 @@ export class AdkService {
 
   async initSession(): Promise<string> {
     if (this.sessionId) return this.sessionId;
-    
+
     const appName = await this.getAppName();
     const id = `session-${Date.now()}`;
-    
+
     const res = await fetch(`${ADK_BASE_URL}/apps/${appName}/users/${USER_ID}/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -142,12 +142,29 @@ export class AdkService {
     for (const msg of messages) {
       if (!msg) continue;
 
-      // v0.9 & v0.9.1 createSurface (scoped to active surfaces)
+      // v1.0, v0.9 & v0.9.1 createSurface (scoped to active surfaces)
       if ('createSurface' in msg && msg.createSurface) {
         surface.surfaceId = msg.createSurface.surfaceId || surface.surfaceId;
         surface.rootId = null;
         surface.components = {};
         surface.dataModel = {};
+
+        // v1.0 single-message creation with embedded components
+        if (Array.isArray(msg.createSurface.components)) {
+          for (const comp of msg.createSurface.components) {
+            if (comp?.id) {
+              surface.components[comp.id] = comp;
+              if (comp.id === 'root') {
+                surface.rootId = 'root';
+              }
+            }
+          }
+        }
+
+        // v1.0 single-message creation with embedded dataModel
+        if (msg.createSurface.dataModel && typeof msg.createSurface.dataModel === 'object') {
+          Object.assign(surface.dataModel, msg.createSurface.dataModel);
+        }
       }
 
       // v0.9 & v0.9.1 deleteSurface (removes active surface, enabling ID reuse)

@@ -1,30 +1,34 @@
-// A2UI Standard MIME Types (v0.9.1 standardized to application/a2ui+json)
+// A2UI Standard MIME Types (v1.0 standardized to application/a2ui+json)
 export const A2UI_MIME_TYPE = 'application/a2ui+json';
 export const DEPRECATED_A2UI_MIME_TYPE = 'application/json+a2ui';
 
-export type A2UIVersion = 'v0.9.1' | 'v0.9' | '0.9.1' | '0.9' | string;
+export type A2UIVersion = '1.0' | 'v1.0' | 'v0.9.1' | 'v0.9' | '0.9.1' | '0.9' | string;
 
 export type BoundValue<T = string> = 
   | T 
-  | { literalString?: string; literalNumber?: number; literalBoolean?: boolean; path?: string };
+  | { '@path'?: string; path?: string; literalString?: string; literalNumber?: number; literalBoolean?: boolean };
 
-// v0.9 & v0.9.1 Component Interface
+// v1.0 & v0.9 Component Interface
 export interface A2UIComponent {
   id: string;
-  // v0.9+ uses flat discriminator: component: "Text"
+  // v1.0 / v0.9 uses flat discriminator: component: "Text"
   // v0.8 uses nested object: component: { Text: { ... } }
   component: string | Record<string, any>;
   [key: string]: any;
 }
 
-// v0.9 & v0.9.1 Lifecycle Messages
+// v1.0 Lifecycle Messages
 export interface CreateSurfaceMessage {
   version?: A2UIVersion;
   createSurface: {
     surfaceId: string;
     catalogId?: string;
-    theme?: Record<string, any>;
     sendDataModel?: boolean;
+    // v1.0 single-message creation support
+    components?: A2UIComponent[];
+    dataModel?: Record<string, any>;
+    // legacy v0.9 theme (removed in v1.0 specification)
+    theme?: Record<string, any>;
   };
 }
 

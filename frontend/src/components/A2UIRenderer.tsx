@@ -26,13 +26,14 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
     if (value.literalString !== undefined) return value.literalString;
     if (value.literalNumber !== undefined) return String(value.literalNumber);
     if (value.literalBoolean !== undefined) return String(value.literalBoolean);
-    if (value.path) {
-      const cleanPath = String(value.path).replace(/^\//, '');
+    const pathRef = value['@path'] ?? value.path;
+    if (pathRef) {
+      const cleanPath = String(pathRef).replace(/^\//, '');
       if (surface.dataModel[cleanPath] !== undefined) {
         return String(surface.dataModel[cleanPath]);
       }
-      if (surface.dataModel[value.path] !== undefined) {
-        return String(surface.dataModel[value.path]);
+      if (surface.dataModel[pathRef] !== undefined) {
+        return String(surface.dataModel[pathRef]);
       }
     }
     return '';
@@ -205,8 +206,19 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
           key={componentId}
           onClick={() => {
             if (action) {
-              const params = action.context || action.parameters || {};
-              onAction?.({ type: action.type, parameters: params, context: params });
+              const callType =
+                action['@call'] ||
+                action.call ||
+                action.callAgentFunction?.function ||
+                action.type ||
+                '';
+              const params =
+                action.args ||
+                action.callAgentFunction?.arguments ||
+                action.parameters ||
+                action.context ||
+                {};
+              onAction?.({ type: callType, parameters: params, context: params });
             }
           }}
           className={

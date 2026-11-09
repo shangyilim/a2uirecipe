@@ -61,16 +61,24 @@ A **Recipe Assistant** built through three progressive stages:
 
 ### Prerequisites
 - Python 3.12+ (or 3.13)
-- A Gemini API Key from [Google AI Studio](https://aistudio.google.com/app/apikey) **OR** a Google Cloud Project with Vertex AI enabled.
+- A Gemini API Key from [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-### 2.1 Project Directory Structure
-In your project folder (`a2uirecipecodelab`), the structure is organized as follows:
+### 2.1 Clone the Codebase
+Clone the repository and check out the starter `stage0` branch:
+```bash
+git clone https://github.com/shangyilim/a2uirecipe.git
+cd a2uirecipe
+git checkout stage0
+```
+
+### 2.2 Project Directory Structure
+In your project folder (`a2uirecipe`), the structure is organized as follows:
 ```text
-a2uirecipecodelab/
-├── .env                  # Environment variables (API keys, RECIPE_STAGE)
-├── .env.example          # Environment variable template
+a2uirecipe/
 ├── services.py           # Root ADK custom services entry point (delegates to recipe_agent)
 ├── recipe_agent/         # Recipe Assistant Agent package
+│   ├── .env              # Environment variables (API keys, RECIPE_STAGE)
+│   ├── .env.example      # Environment variable template
 │   ├── __init__.py       # Package initialization & service hookup
 │   ├── recipes.py        # Curated recipe dataset and get_recipes tool
 │   ├── agent.py          # Unified agent definition (supports Stages 1, 2, and 3)
@@ -89,28 +97,29 @@ a2uirecipecodelab/
     └── package.json
 ```
 
-### 2.2 Install Dependencies
+### 2.3 Install Dependencies
 Create and activate a virtual environment, then install ADK and the A2UI SDK:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install google-adk a2ui-agent-sdk
+pip install google-adk a2ui-agent-sdk a2ui-adk
 ```
 
-### 2.3 Configure API Credentials
-Open `.env` and provide your Gemini API Key or Google Cloud credentials:
-```bash
-# Option A: Google AI Studio
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-
-# Option B: Google Cloud Vertex AI (Optional)
-# GOOGLE_CLOUD_PROJECT=your-gcp-project-id
-# GOOGLE_CLOUD_LOCATION=global
-# GOOGLE_GENAI_USE_ENTERPRISE=True
-
-# Default active stage (1 = text, 2 = raw json, 3 = rendered UI)
-RECIPE_STAGE=1
-```
+### 2.4 Configure API Credentials
+1. Copy the example environment configuration:
+   ```bash
+   cp recipe_agent/.env.example recipe_agent/.env
+   ```
+2. **Obtain your Gemini API Key**:
+   - Go to [Google AI Studio Get API Key](https://aistudio.google.com/app/apikey).
+   - Click **Create API key**.
+   - If prompted, select your active Google Cloud project so the key is associated with it.
+   - Copy the generated key.
+3. Open `recipe_agent/.env` and set your API key:
+   ```bash
+   GEMINI_API_KEY=your_actual_gemini_api_key_here
+   RECIPE_STAGE=1
+   ```
 
 ---
 
@@ -269,9 +278,18 @@ Start the ADK web development server:
 
 ## 5. Stage 2: Generate Structured A2UI JSON (v0.9.1)
 
-Instead of generating unstructured text, we teach the LLM how to output **A2UI v0.9.1 JSON**. 
+> [!TIP]
+> **Catch-up Checkpoint**: If you want to jump straight to Stage 2 or need to reset your code from Stage 1, you can check out the `stage1` branch:
+> ```bash
+> git checkout stage1
+> ```
 
-The `a2ui-agent-sdk` includes a `prompt_generator` that injects the complete A2UI JSON schema, standard component specs, and few-shot formatting rules into the agent's instructions.
+Instead of generating unstructured text, we teach the LLM how to output **A2UI v1.0 JSON**. 
+
+### 5.1 Use `a2ui.adk` A2uiInstruction & A2uiRequestProcessor
+The A2UI framework provides an official ADK integration via `A2uiInstruction` and `A2uiRequestProcessor`.
+- **`A2uiRequestProcessor`**: Binds the component catalog (`BasicCatalog(ProtocolVersion.V1_0)`) with an inference format factory (`DirectJsonFormatFactory()`) and compiles the formal v1.0 JSON schema and workflow rules.
+- **`A2uiInstruction`**: Acts as a dynamic, callable instruction provider for ADK. ADK parses `{variable}` syntax as session state templates; `A2uiInstruction` safely injects A2UI JSON schema templates and few-shot examples without triggering template parsing errors.
 
 To inspect the raw JSON output during this learning step, replace the contents of `recipe_agent/agent.py` with the following. We introduce a callback `show_raw_json` that transforms `<a2ui-json>` into a markdown ````json` code block:
 
@@ -283,32 +301,37 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import Gemini
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
+from a2ui.adk import A2uiInstruction
 from a2ui.core.basic_catalog import BasicCatalog
-from a2ui.inference_formats.direct_json import DirectJsonFormat
+from a2ui.core.schema import ProtocolVersion
+from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
+from a2ui.processor import A2uiRequestProcessor
 from .recipes import get_recipes
 
-a2ui_format = DirectJsonFormat(
-    catalogs=[BasicCatalog("0.9.1")],
+# Initialize A2UI Request Processor with BasicCatalog v1.0
+processor = A2uiRequestProcessor(
+    [BasicCatalog(ProtocolVersion.V1_0)],
+    format_factory=DirectJsonFormatFactory(),
 )
 
-instruction = a2ui_format.prompt_generator.generate(
-    role_description=(
-        "You are an expert culinary assistant and recipe dashboard. When users ask for "
-        "recipes, meal ideas, or cooking instructions, use the get_recipes tool to fetch "
-        "the current state."
-    ),
-    workflow_description=(
-        "Analyze the user's request and return structured A2UI v0.9.1 UI when appropriate."
-    ),
-    ui_description=(
-        "The first component in 'components' MUST have id 'root'. "
-        "Use flat v0.9.1 components where 'component' is a string discriminator (e.g. 'Column', 'Text', 'Button'). "
-        "Use 'children' array with component IDs, 'justify' instead of distribution, 'align' instead of alignment, "
-        "and 'variant' instead of usageHint. Put text directly as strings. "
-        "Respond ONLY with the A2UI JSON array inside <a2ui-json> and </a2ui-json> tags."
-    ),
-    include_schema=True,
-    include_examples=True,
+ROLE_DESCRIPTION = (
+    "You are an expert culinary assistant and recipe dashboard. When users ask for "
+    "recipes, meal ideas, or cooking instructions, use the get_recipes tool to fetch "
+    "the current state."
+)
+
+UI_DESCRIPTION = """
+- The first component in 'components' MUST have id 'root'.
+- Use flat v1.0 components where 'component' is a string discriminator (e.g. 'Column', 'Text', 'Button').
+- Set 'version': '1.0' in every message envelope.
+- Use 'children' array with component IDs, 'justify' instead of distribution, 'align' instead of alignment, and 'variant' instead of usageHint.
+- Respond ONLY with the A2UI JSON array inside <a2ui-json> and </a2ui-json> tags.
+"""
+
+# Dynamic A2UI instruction wrapper for ADK
+instruction = A2uiInstruction(
+    f"{ROLE_DESCRIPTION}\n\n## UI Description:\n{UI_DESCRIPTION}",
+    a2ui_processor=processor,
 )
 
 def show_raw_json(
@@ -346,32 +369,36 @@ root_agent = Agent(
    ```text
    What can I make for dinner tonight?
    ```
-3. **Observation**: The response now outputs structured JSON showing A2UI v0.9 messages (`createSurface`, `updateComponents`, `updateDataModel`).
+3. **Observation**: The response now outputs structured JSON showing A2UI v1.0 messages (`createSurface`, `updateComponents`, `updateDataModel`).
 
 ---
 
-## 6. Understanding the A2UI v0.9 & v0.9.1 Architecture
+## 6. Understanding the A2UI v1.0 Architecture & Evolution
 
-Look closely at the JSON produced in Stage 2. A2UI v0.9 and v0.9.1 represent significant evolutionary steps over v0.8.1, shifting from rigid, deeply nested "Structured Output First" schemas to a clean, token-efficient **"Prompt-First"** architecture designed for modern LLMs:
+Look closely at the JSON produced in Stage 2. The **A2UI v1.0 Specification** ([Evolution Guide](https://a2ui.org/specification/v1.0-evolution-guide/)) standardizes agent-driven UI into an efficient, token-conscious architecture designed for production applications:
 
-### 1. `createSurface` (Replaces `beginRendering`)
-Signals the client to create a surface and prepare for rendering:
+### 1. `createSurface` (Single-Message & Multi-Message Lifecycle)
+Signals the client to create a rendering surface. In v1.0:
+- The envelope version is standardized to `"version": "1.0"`.
+- The `theme` property is deliberately left out as we want to render styling from the client natively.
+- Surface creation supports **single-message surface construction**: `createSurface` can directly embed `components` and initial `dataModel` to eliminate round-trip latency.
+
 ```json
 {
-  "version": "v0.9.1",
+  "version": "1.0",
   "createSurface": {
     "surfaceId": "default",
-    "catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"
+    "catalogId": "https://a2ui.org/specification/v1_0/basic_catalog.json"
   }
 }
 ```
-> **Root Rule in v0.9+**: The legacy `"root"` property in `beginRendering` is removed. The root container is explicitly declared by having exactly one component with `"id": "root"` in `updateComponents`.
+> **Root Rule in v1.0**: The root container is explicitly declared by having exactly one component with `"id": "root"` placed first in `components`.
 
-### 2. `updateComponents` (Replaces `surfaceUpdate`)
-Declares components using a **flat discriminator model** (`component: "<Type>"`) where attributes live directly on the component object rather than wrapped under nested keys:
+### 2. `updateComponents` (Flat Discriminator Model)
+Declares components using a clean **flat discriminator model** (`component: "<Type>"`) where attributes live directly on the component object rather than wrapped under nested keys:
 ```json
 {
-  "version": "v0.9.1",
+  "version": "1.0",
   "updateComponents": {
     "surfaceId": "default",
     "components": [
@@ -409,8 +436,8 @@ Declares components using a **flat discriminator model** (`component: "<Type>"`)
         "label": "Start Cooking",
         "variant": "primary",
         "action": {
-          "type": "start_cooking",
-          "context": { "recipe_name": "Classic Roman Carbonara" }
+          "@call": "start_cooking",
+          "args": { "recipe_name": "Classic Roman Carbonara" }
         }
       }
     ]
@@ -418,11 +445,13 @@ Declares components using a **flat discriminator model** (`component: "<Type>"`)
 }
 ```
 
-### 3. `updateDataModel` (Replaces `dataModelUpdate`)
-Uses natural JSON key-value maps with upsert semantics, rather than verbose typed adjacency lists:
+### 3. `updateDataModel` & `@path` Syntax
+Data bindings and updates use natural JSON key-value maps:
+- In A2UI v1.0, data-bound properties use the `@path` prefix (e.g. `{"@path": "/recipe_name"}`).
+- Data model updates are applied with upsert semantics:
 ```json
 {
-  "version": "v0.9.1",
+  "version": "1.0",
   "updateDataModel": {
     "surfaceId": "default",
     "value": {
@@ -433,38 +462,46 @@ Uses natural JSON key-value maps with upsert semantics, rather than verbose type
 }
 ```
 
-### 4. `deleteSurface` (v0.9.1 Active Surface Scoping)
-In v0.9.1, surface IDs are scoped to **currently active surfaces** rather than being strictly unique across the entire lifetime of the renderer. When a surface is deleted via `deleteSurface`, its ID can be safely reused for future interactions:
+### 4. `deleteSurface` (Active Surface Scoping)
+Surface IDs are scoped to **currently active surfaces**. When a surface is deleted via `deleteSurface`, its ID can be safely reused for future interactions:
 ```json
 {
-  "version": "v0.9.1",
+  "version": "1.0",
   "deleteSurface": {
     "surfaceId": "default"
   }
 }
 ```
 
-### v0.8.1 vs v0.9 vs v0.9.1 Migration Quick Reference
+### 5. Standardized MIME Type & Bidirectional RPC
+- **MIME Type**: Official MIME type is standardized to `application/a2ui+json`.
+- **Bidirectional RPC**: v1.0 introduces native agent-renderer function invocation:
+  - `callRendererFunction` / `rendererFunctionResponse`
+  - `callAgentFunction` / `agentFunctionResponse`
 
-| Feature | v0.8.1 (Legacy) | v0.9 (Evolution) | v0.9.1 (Standardized) |
+### Specification Evolution Quick Reference
+
+| Feature | v0.8.1 (Legacy) | v0.9 / v0.9.1 (Evolution) | v1.0 (Standardized) |
 | :--- | :--- | :--- | :--- |
-| **MIME Type** | `application/json` | `application/json+a2ui` (draft) | **`application/a2ui+json`** (standardized) |
-| **Surface ID Scope** | Lifetime of renderer | Lifetime of renderer | **Currently active surfaces** (reuse after `deleteSurface`) |
-| **Component Format** | Nested: `{ "component": { "Text": {...} } }` | Flat: `{ "component": "Text", ... }` | Flat: `{ "component": "Text", ... }` |
-| **Surface Creation** | `beginRendering: { surfaceId, root }` | `createSurface: { surfaceId, catalogId }` | `createSurface: { surfaceId, catalogId }` |
-| **Root Convention** | Parameter in `beginRendering` | Component with `"id": "root"` | Component with `"id": "root"` |
-| **Component Updates** | `surfaceUpdate: { components }` | `updateComponents: { components }` | `updateComponents: { components }` |
-| **Data Updates** | `dataModelUpdate: { contents: [{key, valueString}] }` | `updateDataModel: { value: {...} }` | `updateDataModel: { value: {...} }` |
-| **Child Lists** | `children: { explicitList: ["id1", "id2"] }` | `children: ["id1", "id2"]` | `children: ["id1", "id2"]` |
-| **String Values** | `{ literalString: "Hello" }` | Natural `"Hello"` | Natural `"Hello"` |
-| **Button Action Context**| `context: [{ key, value: { literalString } }]` | Standard map: `context: {...}` | Standard map: `context: {...}` |
-| **Button Style** | `primary: true` | `variant: "primary" \| "borderless"` | `variant: "primary" \| "borderless"` |
-| **Layout Properties**| `distribution`, `alignment` | `justify`, `align` | `justify`, `align` |
-| **Text Styling** | `usageHint: "h1"` | `variant: "h1"` | `variant: "h1"` |
+| **Envelope Version** | Omitted | `"v0.9.1"` | **`"version": "1.0"`** |
+| **MIME Type** | `application/json` | `application/a2ui+json` | **`application/a2ui+json`** |
+| **Data Binding** | `{ "path": "/key" }` | `{ "path": "/key" }` | **`{ "@path": "/key" }`** |
+| **Action / Call** | `{ "call": "fn" }` | `{ "type": "fn", "context": {...} }` | **`{ "@call": "fn", "args": {...} }`** |
+| **Surface Creation** | `beginRendering: { root }` | `createSurface: { surfaceId }` | **`createSurface` (supports embedded components & dataModel)** |
+| **Theme in Surface** | Deprecated | `theme: {...}` | **Removed** (native client theme) |
+| **Component Model** | Nested `{ "component": { "Text": {...} } }` | Flat `{ "component": "Text", ... }` | **Flat `{ "component": "Text", ... }`** |
+| **Root Convention** | Parameter in `beginRendering` | Component with `"id": "root"` | **Component with `"id": "root"` placed first** |
+| **Surface ID Scope** | Lifetime of renderer | Active surfaces | **Currently active surfaces** |
 
 ---
 
 ## 7. Stage 3: Unified Agent Architecture & Custom A2UI Catalog
+
+> [!TIP]
+> **Catch-up Checkpoint**: If you want to jump straight to Stage 3 or need to reset your code from Stage 2, you can check out the `stage2` branch:
+> ```bash
+> git checkout stage2
+> ```
 
 In Stage 3, the agent supports full rendered A2UI with a **three-stage culinary workflow**:
 1. **Stage A (Discovery)**: Displays `RecipeSummaryCard`s featuring high-resolution food photography, cook times, difficulty badges, and "View" / "Let's Cook This" action buttons.
@@ -483,12 +520,12 @@ from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import Gemini
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
+from a2ui.adk import A2uiInstruction
 from a2ui.core.basic_catalog import BasicCatalog
-from a2ui.inference_formats.direct_json import DirectJsonFormat
+from a2ui.core.schema import ProtocolVersion
+from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
+from a2ui.processor import A2uiRequestProcessor
 from .recipes import get_recipes
-
-# Set Stage: 1 (Plain Text), 2 (Raw JSON), or 3 (Rendered UI)
-STAGE = int(os.environ.get("RECIPE_STAGE", "3"))
 
 # ==============================================================================
 # Model Configuration
@@ -498,161 +535,173 @@ gemini_model = Gemini(
     retry_options=types.HttpRetryOptions(attempts=5),
 )
 
-# Mandatory Grounding Instructions
-MANDATORY_TOOL_INSTRUCTIONS = (
-    "MANDATORY RECIPE RETRIEVAL RULES:\n"
-    "1. You do NOT have internal knowledge of recipes, ingredients, instructions, or images.\n"
-    "2. Whenever the user asks for recipes ('all recipes', 'dinner ideas', 'what can I cook'), "
-    "or asks about a specific recipe, you MUST FIRST call the `get_recipes` tool.\n"
-    "3. NEVER invent or hallucinate recipes, ingredients, instructions, or image URLs. Only use recipes returned by `get_recipes`.\n"
-    "4. After the tool returns the list of recipes, generate the appropriate A2UI JSON UI using the exact data from the tool response.\n"
+
+processor = A2uiRequestProcessor(
+    [BasicCatalog(ProtocolVersion.V1_0)],
+    format_factory=DirectJsonFormatFactory(),
 )
 
-# ==============================================================================
-# Stages 2 & 3: A2UI Schema & Prompt Generation
-# ==============================================================================
-# Stages 2 & 3: A2UI Schema & Prompt Generation
-# ==============================================================================
-a2ui_format = DirectJsonFormat(
-    catalogs=[BasicCatalog("0.9.1")],
+ROLE_DESCRIPTION = (
+    "You are an expert culinary assistant and interactive recipe dashboard. "
+    "CRITICAL: You do NOT have internal recipe knowledge. You MUST call the get_recipes tool "
+    "whenever the user asks for recipes, lists recipes, or asks for meal recommendations. "
+    "Never invent or hallucinate recipe data or image URLs. Only use the data from get_recipes."
 )
 
-a2ui_instruction = a2ui_format.prompt_generator.generate(
-    role_description=(
-        "You are an expert culinary assistant and interactive recipe dashboard. "
-        "CRITICAL: You do NOT have internal recipe knowledge. You MUST call the get_recipes tool "
-        "whenever the user asks for recipes, lists recipes, or asks for meal recommendations. "
-        "Never invent or hallucinate recipe data or image URLs. Only use the data from get_recipes."
-    ),
-    workflow_description=(
-        "1. RECIPE RETRIEVAL (MANDATORY):\n"
-        "When the user asks for recipes, all recipes, or meal ideas, ALWAYS call get_recipes first.\n\n"
-        "2. STAGE A - RECIPE LIST / DISCOVERY:\n"
-        "After receiving recipes from get_recipes, present them using 'RecipeSummaryCard' components inside a Column root container. "
-        "Each card features the recipe's title, cooking stats, badge, authentic image_url from the tool, a 'View' button, and a 'Let\'s Cook This' button.\n\n"
-        "3. STAGE B - RECIPE DETAILS:\n"
-        "When the user clicks 'View' (or asks for full details/ingredients of a recipe), render the full 'RecipeDetailCard' with complete ingredients list. "
-        "The RecipeDetailCard includes the 'Let\'s Cook This' button so the user can start step-by-step guided cooking.\n\n"
-        "4. STAGE C - STEP-BY-STEP GUIDED COOKING (ALL STEPS IN 1 SINGLE CARD):\n"
-        "When the user clicks 'Let\'s Cook This' or asks to cook/prepare a dish:\n"
-        "- Return ALL instruction steps in a single 'GuidedCookingCard'. The card lets the user navigate forward and backward locally via Next and Previous buttons without calling the agent again!\n"
-        "- In the 'steps' array, include each step's title, instruction, and optional tip.\n"
-        "- For instructions that have TIME information (boiling, searing, simmering, sautéing, baking, chilling, resting): specify 'timerMinutes' (number of minutes) and 'duration' (e.g. '10 mins', '5 mins') so an interactive countdown timer appears directly on that step!\n"
-        "- For GENERAL instructions (prep, whisking, chopping, tossing, seasoning, plating): omit timerMinutes so it displays a clean, focused instruction card.\n"
-    ),
-    ui_description=(
-        "Construct rich A2UI v0.9.1 surfaces following these rules:\n"
-        "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
-        "2. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
-        "3. FLAT V0.9.1 COMPONENT MODEL: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object (not nested under a type key).\n\n"
-        "4. Root Container Example:\n"
-        "{\n"
-        '  "id": "root",\n'
-        '  "component": "Column",\n'
-        '  "children": ["recipe-summary-1", "recipe-summary-2"],\n'
-        '  "justify": "start"\n'
-        "}\n\n"
-        "5. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
-        "{\n"
-        '  "id": "recipe-summary-<id>",\n'
-        '  "component": "RecipeSummaryCard",\n'
-        '  "recipeId": "<recipe.id>",\n'
-        '  "name": "<recipe.name>",\n'
-        '  "description": "<recipe.description>",\n'
-        '  "cookTime": "<recipe.cook_time>",\n'
-        '  "prepTime": "<recipe.prep_time>",\n'
-        '  "difficulty": "<recipe.difficulty>",\n'
-        '  "calories": "<recipe.calories>",\n'
-        '  "cuisine": "<recipe.cuisine>",\n'
-        '  "badge": "<recipe.badge>",\n'
-        '  "imageUrl": "<recipe.image_url>"\n'
-        "}\n\n"
-        "6. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
-        "{\n"
-        '  "id": "recipe-detail-<id>",\n'
-        '  "component": "RecipeDetailCard",\n'
-        '  "recipeId": "<recipe.id>",\n'
-        '  "name": "<recipe.name>",\n'
-        '  "description": "<recipe.description>",\n'
-        '  "prepTime": "<recipe.prep_time>",\n'
-        '  "cookTime": "<recipe.cook_time>",\n'
-        '  "servings": <recipe.servings>,\n'
-        '  "difficulty": "<recipe.difficulty>",\n'
-        '  "calories": "<recipe.calories>",\n'
-        '  "cuisine": "<recipe.cuisine>",\n'
-        '  "badge": "<recipe.badge>",\n'
-        '  "imageUrl": "<recipe.image_url>",\n'
-        '  "ingredients": <recipe.ingredients>,\n'
-        '  "showCookButton": true\n'
-        "}\n\n"
-        "7. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
-        "Bundle ALL steps for the recipe in a single GuidedCookingCard so the user navigates locally with Next and Previous buttons:\n"
-        "{\n"
-        '  "id": "guided-cooking-1",\n'
-        '  "component": "GuidedCookingCard",\n'
-        '  "dish": "Classic Roman Carbonara",\n'
-        '  "steps": [\n'
-        '    {\n'
-        '      "step": 1,\n'
-        '      "title": "Boil Pasta until Al Dente",\n'
-        '      "instruction": "Bring a large pot of salted water to a gentle boil and cook spaghetti until al dente.",\n'
-        '      "duration": "10 mins",\n'
-        '      "timerMinutes": 10,\n'
-        '      "dish": "Classic Roman Carbonara",\n'
-        '      "tip": "Save 1/2 cup of starchy pasta water before draining!"\n'
-        '    },\n'
-        '    {\n'
-        '      "step": 2,\n'
-        '      "title": "Crisp the Guanciale",\n'
-        '      "instruction": "In a large skillet, cook sliced guanciale over medium heat until golden and crispy.",\n'
-        '      "duration": "5 mins",\n'
-        '      "timerMinutes": 5,\n'
-        '      "dish": "Classic Roman Carbonara",\n'
-        '      "tip": "Render fat slowly for extra crunch."\n'
-        '    },\n'
-        '    {\n'
-        '      "step": 3,\n'
-        '      "title": "Whisk Egg and Cheese Mixture",\n'
-        '      "instruction": "In a bowl, whisk whole eggs, egg yolks, grated Pecorino Romano, and freshly cracked black pepper.",\n'
-        '      "dish": "Classic Roman Carbonara",\n'
-        '      "tip": "Whisk until a thick, creamy paste forms."\n'
-        '    },\n'
-        '    {\n'
-        '      "step": 4,\n'
-        '      "title": "Combine Pasta and Guanciale",\n'
-        '      "instruction": "Transfer al dente pasta into the skillet with guanciale and toss to coat in rendered fat off the heat.",\n'
-        '      "dish": "Classic Roman Carbonara"\n'
-        '    },\n'
-        '    {\n'
-        '      "step": 5,\n'
-        '      "title": "Emulsify Carbonara Sauce",\n'
-        '      "instruction": "Off the heat, quickly pour in egg mixture while vigorously tossing pasta. Splash reserved pasta water as needed to create a glossy sauce.",\n'
-        '      "dish": "Classic Roman Carbonara",\n'
-        '      "tip": "Keep skillet off heat to prevent eggs from scrambling!"\n'
-        '    }\n'
-        '  ]\n'
-        "}\n\n"
-        "8. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
-        "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown:\n"
-        "{\n"
-        '  "id": "info-card-1",\n'
-        '  "component": "DefaultCard",\n'
-        '  "title": "Chef\'s Tip & Dietary Notes",\n'
-        '  "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and starchy water creates the silky texture.\\n- **Toast the pepper**: Toasted black pepper releases fragrant essential oils."\n'
-        "}\n\n"
-        "Wrap your A2UI JSON array inside <a2ui-json> and </a2ui-json> tags."
-    ),
-    include_schema=True,
-    include_examples=True,
+WORKFLOW_DESCRIPTION = (
+    "### Recipe Assistant Workflow:\n"
+    "1. RECIPE RETRIEVAL (MANDATORY):\n"
+    "When the user asks for recipes, all recipes, or meal ideas, ALWAYS call get_recipes first.\n\n"
+    "2. STAGE A - RECIPE LIST / DISCOVERY:\n"
+    "After receiving recipes from get_recipes, present them using 'RecipeSummaryCard' components inside a Column root container. "
+    "Each card features the recipe's title, cooking stats, badge, authentic image_url from the tool, a 'View' button, and a 'Let\'s Cook This' button.\n\n"
+    "3. STAGE B - RECIPE DETAILS:\n"
+    "When the user clicks 'View' (or asks for full details/ingredients of a recipe), render the full 'RecipeDetailCard' with complete ingredients list. "
+    "The RecipeDetailCard includes the 'Let\'s Cook This' button so the user can start step-by-step guided cooking.\n\n"
+    "4. STAGE C - STEP-BY-STEP GUIDED COOKING (ALL STEPS IN 1 SINGLE CARD):\n"
+    "When the user clicks 'Let\'s Cook This' or asks to cook/prepare a dish:\n"
+    "- Return ALL instruction steps in a single 'GuidedCookingCard'. The card lets the user navigate forward and backward locally via Next and Previous buttons without calling the agent again!\n"
+    "- In the 'steps' array, include each step's title, instruction, and optional tip.\n"
+    "- For instructions that have TIME information (boiling, searing, simmering, sautéing, baking, chilling, resting): specify 'timerMinutes' (number of minutes) and 'duration' (e.g. '10 mins', '5 mins') so an interactive countdown timer appears directly on that step!\n"
+    "- For GENERAL instructions (prep, whisking, chopping, tossing, seasoning, plating): omit timerMinutes so it displays a clean, focused instruction card."
 )
 
-STAGE_3_INSTRUCTION = MANDATORY_TOOL_INSTRUCTIONS + "\n\n" + a2ui_instruction
+UI_DESCRIPTION = (
+    "### A2UI v1.0 Component Specifications:\n"
+    "Construct rich A2UI v1.0 surfaces following these rules:\n"
+    "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
+    "2. A2UI v1.0 ENVELOPE: Set \"version\": \"1.0\" in each A2UI message.\n"
+    "3. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
+    "4. FLAT v1.0 COMPONENT MODEL: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object.\n\n"
+    "5. Root Container Example:\n"
+    "{\n"
+    '  "id": "root",\n'
+    '  "component": "Column",\n'
+    '  "children": ["recipe-summary-1", "recipe-summary-2"],\n'
+    '  "justify": "start"\n'
+    "}\n\n"
+    "6. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
+    "{\n"
+    '  "id": "recipe-summary-<id>",\n'
+    '  "component": "RecipeSummaryCard",\n'
+    '  "recipeId": "<recipe.id>",\n'
+    '  "name": "<recipe.name>",\n'
+    '  "description": "<recipe.description>",\n'
+    '  "cookTime": "<recipe.cook_time>",\n'
+    '  "prepTime": "<recipe.prep_time>",\n'
+    '  "difficulty": "<recipe.difficulty>",\n'
+    '  "calories": "<recipe.calories>",\n'
+    '  "cuisine": "<recipe.cuisine>",\n'
+    '  "badge": "<recipe.badge>",\n'
+    '  "imageUrl": "<recipe.image_url>"\n'
+    "}\n\n"
+    "7. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
+    "{\n"
+    '  "id": "recipe-detail-<id>",\n'
+    '  "component": "RecipeDetailCard",\n'
+    '  "recipeId": "<recipe.id>",\n'
+    '  "name": "<recipe.name>",\n'
+    '  "description": "<recipe.description>",\n'
+    '  "prepTime": "<recipe.prep_time>",\n'
+    '  "cookTime": "<recipe.cook_time>",\n'
+    '  "servings": <recipe.servings>,\n'
+    '  "difficulty": "<recipe.difficulty>",\n'
+    '  "calories": "<recipe.calories>",\n'
+    '  "cuisine": "<recipe.cuisine>",\n'
+    '  "badge": "<recipe.badge>",\n'
+    '  "imageUrl": "<recipe.image_url>",\n'
+    '  "ingredients": <recipe.ingredients>,\n'
+    '  "showCookButton": true\n'
+    "}\n\n"
+    "8. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
+    "Bundle ALL steps for the recipe in a single GuidedCookingCard so the user navigates locally with Next and Previous buttons:\n"
+    "{\n"
+    '  "id": "guided-cooking-1",\n'
+    '  "component": "GuidedCookingCard",\n'
+    '  "dish": "Classic Roman Carbonara",\n'
+    '  "steps": [\n'
+    '    {\n'
+    '      "step": 1,\n'
+    '      "title": "Boil Pasta until Al Dente",\n'
+    '      "instruction": "Bring a large pot of salted water to a gentle boil and cook spaghetti until al dente.",\n'
+    '      "duration": "10 mins",\n'
+    '      "timerMinutes": 10,\n'
+    '      "dish": "Classic Roman Carbonara",\n'
+    '      "tip": "Save 1/2 cup of starchy pasta water before draining!"\n'
+    '    },\n'
+    '    {\n'
+    '      "step": 2,\n'
+    '      "title": "Crisp the Guanciale",\n'
+    '      "instruction": "In a large skillet, cook sliced guanciale over medium heat until golden and crispy.",\n'
+    '      "duration": "5 mins",\n'
+    '      "timerMinutes": 5,\n'
+    '      "dish": "Classic Roman Carbonara",\n'
+    '      "tip": "Render fat slowly for extra crunch."\n'
+    '    },\n'
+    '    {\n'
+    '      "step": 3,\n'
+    '      "title": "Whisk Egg and Cheese Mixture",\n'
+    '      "instruction": "In a bowl, whisk whole eggs, egg yolks, grated Pecorino Romano, and freshly cracked black pepper.",\n'
+    '      "dish": "Classic Roman Carbonara",\n'
+    '      "tip": "Whisk until a thick, creamy paste forms."\n'
+    '    },\n'
+    '    {\n'
+    '      "step": 4,\n'
+    '      "title": "Combine Pasta and Guanciale",\n'
+    '      "instruction": "Transfer al dente pasta into the skillet with guanciale and toss to coat in rendered fat off the heat.",\n'
+    '      "dish": "Classic Roman Carbonara"\n'
+    '    },\n'
+    '    {\n'
+    '      "step": 5,\n'
+    '      "title": "Emulsify Carbonara Sauce",\n'
+    '      "instruction": "Off the heat, quickly pour in egg mixture while vigorously tossing pasta. Splash reserved pasta water as needed to create a glossy sauce.",\n'
+    '      "dish": "Classic Roman Carbonara",\n'
+    '      "tip": "Keep skillet off heat to prevent eggs from scrambling!"\n'
+    '    }\n'
+    '  ]\n'
+    "}\n\n"
+    "8. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
+    "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown:\n"
+    "{\n"
+    '  "id": "info-card-1",\n'
+    '  "component": "DefaultCard",\n'
+    '  "title": "Chef\'s Tip & Dietary Notes",\n'
+    '  "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and starchy water creates the silky texture.\\n- **Toast the pepper**: Toasted black pepper releases fragrant essential oils."\n'
+    "}\n\n"
+    "Wrap your A2UI JSON array inside <a2ui-json> and </a2ui-json> tags."
+)
+
+a2ui_instruction = A2uiInstruction(
+    (
+        f"{ROLE_DESCRIPTION}\n\n"
+        f"{WORKFLOW_DESCRIPTION}\n\n"
+        f"## UI Description:\n{UI_DESCRIPTION}"
+    ),
+    a2ui_processor=processor,
+)
+
+
+def show_raw_json(
+    callback_context: CallbackContext,
+    llm_response: LlmResponse,
+) -> LlmResponse | None:
+    if not llm_response.content or not llm_response.content.parts:
+        return None
+    for part in llm_response.content.parts:
+        if part.text:
+            part.text = (
+                part.text
+                .replace("<a2ui-json>", "```json\n")
+                .replace("</a2ui-json>", "\n```")
+            )
+    return llm_response
+
 
 root_agent = Agent(
     model=gemini_model,
     name="recipe_assistant",
     description="A culinary assistant that renders rich A2UI recipe interfaces.",
-    instruction=STAGE_3_INSTRUCTION,
+    instruction=a2ui_instruction,
     tools=[get_recipes],
 )
 ```
