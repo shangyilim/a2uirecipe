@@ -1153,7 +1153,7 @@ export const culinaryCatalog = basicCatalog.derive({
 
 ### 8.4 Implement Custom UI Components in `frontend/src/components/A2UIRenderer.tsx`
 
-Open `frontend/src/components/A2UIRenderer.tsx` in Cloud Shell Editor and update it to validate and render surfaces via `MessageProcessor([culinaryCatalog, basicCatalog])` and `<A2uiSurface />`, with a resilient React `renderComponent` fallback:
+Open `frontend/src/components/A2UIRenderer.tsx` in Cloud Shell Editor and update it to validate and render surfaces strictly via `MessageProcessor([culinaryCatalog])` and `<A2uiSurface />`, showing a clear error banner if the agent returns `BasicCatalog` (or fails schema validation) instead of falling back:
 
 ```tsx
 // frontend/src/components/A2UIRenderer.tsx
@@ -1161,9 +1161,9 @@ Open `frontend/src/components/A2UIRenderer.tsx` in Cloud Shell Editor and update
 import { useState, useEffect, type FC, type ReactNode } from 'react';
 import { MessageProcessor, basicCatalog } from '@a2ui/web_core/v1_0';
 import { A2uiSurface } from '@a2ui/react';
-import { culinaryCatalog } from '../catalog/culinaryCatalog';
+import { culinaryCatalog, CULINARY_CATALOG_ID } from '../catalog/culinaryCatalog';
 import { A2UIComponent, SurfaceState } from '../types/a2ui';
-import { Clock, Star, Flame, ChefHat } from 'lucide-react';
+import { Clock, Star, Flame, ChefHat, AlertCircle } from 'lucide-react';
 import { RecipeDetailCard } from './RecipeDetailCard';
 import { RecipeSummaryCard } from './RecipeSummaryCard';
 import { CookingTimer } from './CookingTimer';
@@ -1180,14 +1180,27 @@ interface Props {
 
 export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
   const [catalogSurfaces, setCatalogSurfaces] = useState<any[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!messages || messages.length === 0) {
       setCatalogSurfaces([]);
+      setCatalogError(null);
       return;
     }
 
-    const processor = new MessageProcessor([culinaryCatalog, basicCatalog]);
+    const returnedBasicCatalog = messages.some(
+      (msg) => msg?.createSurface?.catalogId === basicCatalog.id
+    );
+    if (returnedBasicCatalog) {
+      setCatalogSurfaces([]);
+      setCatalogError(
+        `Custom Catalog mode expected ${CULINARY_CATALOG_ID}, but the agent returned BasicCatalog (${basicCatalog.id}). Switch the header toggle to "Default (@a2ui/react)" or enable CulinaryCatalog on the agent.`
+      );
+      return;
+    }
+
+    const processor = new MessageProcessor([culinaryCatalog]);
     const actionSubs: Array<{ unsubscribe: () => void }> = [];
 
     const sync = () => {
@@ -1217,9 +1230,21 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
     try {
       processor.processMessages(messages);
       sync();
+      if (processor.model.surfacesMap.size === 0) {
+        setCatalogError(
+          `Custom Catalog renderer could not create a surface for ${CULINARY_CATALOG_ID}.`
+        );
+      } else {
+        setCatalogError(null);
+      }
     } catch (err) {
-      console.warn('Formal Culinary Catalog processor fallback triggered:', err);
+      console.warn('Formal Culinary Catalog processor error:', err);
       setCatalogSurfaces([]);
+      setCatalogError(
+        err instanceof Error
+          ? err.message
+          : `Failed to validate payload against Custom Catalog (${CULINARY_CATALOG_ID}).`
+      );
     }
 
     return () => {
@@ -1228,6 +1253,21 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
       actionSubs.forEach((sub) => sub.unsubscribe());
     };
   }, [messages, onAction]);
+
+  if (catalogError) {
+    return (
+      <div
+        role="alert"
+        className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-900"
+      >
+        <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-600" />
+        <div className="space-y-1">
+          <p className="font-semibold">Catalog Mismatch Error</p>
+          <p className="leading-relaxed text-red-800">{catalogError}</p>
+        </div>
+      </div>
+    );
+  }
 
   // If official A2UI MessageProcessor successfully validated & built the formal culinaryCatalog surface(s), render via A2uiSurface
   if (catalogSurfaces.length > 0) {
@@ -1240,7 +1280,7 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
     );
   }
 
-  // Fallback: render directly from parsed SurfaceState if messages were absent or failed schema validation
+  // Fallback: only when raw A2UI messages were not supplied (e.g., direct SurfaceState rendering)
   if (!surface || !surface.rootId || !surface.components[surface.rootId]) {
     return null;
   }
@@ -1249,9 +1289,6 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
     if (value === null || value === undefined) return '';
     if (typeof value === 'string') return value;
     if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    if (value.literalString !== undefined) return value.literalString;
-    if (value.literalNumber !== undefined) return String(value.literalNumber);
-    if (value.literalBoolean !== undefined) return String(value.literalBoolean);
     const pathRef = value['@path'] ?? value.path;
     if (pathRef) {
       const cleanPath = String(pathRef).replace(/^\//, '');
@@ -1266,23 +1303,13 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
   };
 
   const getComponentInfo = (item: A2UIComponent): { type: string; props: any } => {
-    if (!item) return { type: '', props: {} };
-    if (typeof item.component === 'string') {
-      return { type: item.component, props: item };
-    }
-    if (typeof item.component === 'object' && item.component !== null) {
-      const type = Object.keys(item.component)[0] || '';
-      return { type, props: item.component[type] || {} };
-    }
-    return { type: '', props: {} };
+    if (!item || typeof item.component !== 'string') return { type: '', props: {} };
+    return { type: item.component, props: item };
   };
 
   const getChildIds = (props: any): string[] => {
     if (Array.isArray(props.children)) {
       return props.children.map(String);
-    }
-    if (props.children && Array.isArray(props.children.explicitList)) {
-      return props.children.explicitList.map(String);
     }
     return [];
   };
@@ -1295,8 +1322,8 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
 
     // Text Primitive
     if (type === 'Text') {
-      const textVal = resolveValue(props.text ?? props.value);
-      const variant = props.variant || props.usageHint;
+      const textVal = resolveValue(props.text);
+      const variant = props.variant;
       switch (variant) {
         case 'h1':
           return (
@@ -1402,7 +1429,7 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
     // Row Primitive
     if (type === 'Row') {
       const childrenIds = getChildIds(props);
-      const justifyAttr = props.justify || props.distribution;
+      const justifyAttr = props.justify;
       const justify =
         justifyAttr === 'spaceBetween' || justifyAttr === 'space-between'
           ? 'justify-between'
@@ -1435,17 +1462,15 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
             if (action) {
               const callType =
                 action.event?.name ||
+                action.functionCall?.['@call'] ||
+                action.functionCall?.call ||
                 action.name ||
-                action['@call'] ||
-                action.call ||
-                action.callAgentFunction?.function ||
                 action.type ||
                 '';
               const params =
                 action.event?.context ||
+                action.functionCall?.args ||
                 action.context ||
-                action.args ||
-                action.callAgentFunction?.arguments ||
                 action.parameters ||
                 {};
               onAction?.({ type: callType, parameters: params, context: params });
@@ -1483,7 +1508,7 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
       return (
         <img
           key={componentId}
-          src={resolveValue(props.url || props.src)}
+          src={normalizeImageUrl(resolveValue(props.url))}
           alt={resolveValue(props.alt) || 'Recipe'}
           className="rounded-xl object-cover max-h-52 w-full mb-2 border border-slate-100"
         />

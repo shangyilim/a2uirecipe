@@ -1,5 +1,7 @@
 # recipe_agent/agent.py
 
+from a2ui.core.schema import ProtocolVersion
+from a2ui.core.basic_catalog import BasicCatalog
 import os
 from google.adk.agents import Agent
 from google.adk.models import Gemini
@@ -19,7 +21,13 @@ gemini_model = Gemini(
     retry_options=types.HttpRetryOptions(attempts=5),
 )
 
+# # basic catalog
+# processor = A2uiRequestProcessor(
+#     [BasicCatalog(ProtocolVersion.V1_0)],
+#     format_factory=DirectJsonFormatFactory(),
+# )
 
+# custom catalog
 processor = A2uiRequestProcessor(
     [create_culinary_catalog()],
     format_factory=DirectJsonFormatFactory(),

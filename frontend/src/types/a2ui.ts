@@ -1,19 +1,14 @@
-// A2UI Standard MIME Types (v1.0 standardized to application/a2ui+json)
+// A2UI Standard MIME Type (v1.0)
 export const A2UI_MIME_TYPE = 'application/a2ui+json';
-export const DEPRECATED_A2UI_MIME_TYPE = 'application/json+a2ui';
 
-export type A2UIVersion = '1.0' | 'v1.0' | 'v0.9.1' | 'v0.9' | '0.9.1' | '0.9' | string;
+export type A2UIVersion = '1.0' | 'v1.0';
 
-export type BoundValue<T = string> = 
-  | T 
-  | { '@path'?: string; path?: string; literalString?: string; literalNumber?: number; literalBoolean?: boolean };
+export type BoundValue<T = string> = T | { '@path'?: string; path?: string };
 
-// v1.0 & v0.9 Component Interface
+// v1.0 Flat Discriminator Component Interface
 export interface A2UIComponent {
   id: string;
-  // v1.0 / v0.9 uses flat discriminator: component: "Text"
-  // v0.8 uses nested object: component: { Text: { ... } }
-  component: string | Record<string, any>;
+  component: string;
   [key: string]: any;
 }
 
@@ -27,8 +22,6 @@ export interface CreateSurfaceMessage {
     // v1.0 single-message creation support
     components?: A2UIComponent[];
     dataModel?: Record<string, any>;
-    // legacy v0.9 theme (removed in v1.0 specification)
-    theme?: Record<string, any>;
   };
 }
 
@@ -56,42 +49,11 @@ export interface DeleteSurfaceMessage {
   };
 }
 
-// v0.8 Legacy Messages (for backwards compatibility)
-export interface BeginRenderingMessage {
-  beginRendering: {
-    surfaceId: string;
-    root: string;
-    styles?: Record<string, any>;
-  };
-}
-
-export interface SurfaceUpdateMessage {
-  surfaceUpdate: {
-    surfaceId: string;
-    components: A2UIComponent[];
-  };
-}
-
-export interface DataModelUpdateMessage {
-  dataModelUpdate: {
-    surfaceId: string;
-    contents: Array<{
-      key: string;
-      valueString?: string;
-      valueNumber?: number;
-      valueBoolean?: boolean;
-    }>;
-  };
-}
-
-export type A2UIMessage = 
+export type A2UIMessage =
   | CreateSurfaceMessage
   | UpdateComponentsMessage
   | UpdateDataModelMessage
-  | DeleteSurfaceMessage
-  | BeginRenderingMessage 
-  | SurfaceUpdateMessage 
-  | DataModelUpdateMessage;
+  | DeleteSurfaceMessage;
 
 export interface SurfaceState {
   surfaceId: string;

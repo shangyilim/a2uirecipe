@@ -155,7 +155,7 @@ export class AdkService {
     for (const msg of messages) {
       if (!msg) continue;
 
-      // v1.0, v0.9 & v0.9.1 createSurface (scoped to active surfaces)
+      // v1.0 createSurface (scoped to active surfaces)
       if ('createSurface' in msg && msg.createSurface) {
         surface.surfaceId = msg.createSurface.surfaceId || surface.surfaceId;
         surface.rootId = null;
@@ -180,7 +180,7 @@ export class AdkService {
         }
       }
 
-      // v0.9 & v0.9.1 deleteSurface (removes active surface, enabling ID reuse)
+      // v1.0 deleteSurface (removes active surface, enabling ID reuse)
       if ('deleteSurface' in msg && msg.deleteSurface) {
         const delId = msg.deleteSurface.surfaceId;
         if (!delId || delId === surface.surfaceId) {
@@ -190,7 +190,7 @@ export class AdkService {
         }
       }
 
-      // v0.9 & v0.9.1 updateComponents
+      // v1.0 updateComponents
       if ('updateComponents' in msg && msg.updateComponents) {
         if (msg.updateComponents.surfaceId) {
           surface.surfaceId = msg.updateComponents.surfaceId;
@@ -205,7 +205,7 @@ export class AdkService {
         }
       }
 
-      // v0.9 updateDataModel
+      // v1.0 updateDataModel
       if ('updateDataModel' in msg && msg.updateDataModel) {
         const val = msg.updateDataModel.value;
         const path = msg.updateDataModel.path;
@@ -216,29 +216,6 @@ export class AdkService {
             const cleanPath = path.replace(/^\//, '');
             surface.dataModel[cleanPath] = val;
           }
-        }
-      }
-
-      // v0.8 legacy beginRendering
-      if ('beginRendering' in msg && msg.beginRendering) {
-        surface.surfaceId = msg.beginRendering.surfaceId || surface.surfaceId;
-        surface.rootId = msg.beginRendering.root || surface.rootId;
-      }
-
-      // v0.8 legacy surfaceUpdate
-      if ('surfaceUpdate' in msg && msg.surfaceUpdate) {
-        for (const comp of msg.surfaceUpdate.components || []) {
-          if (comp?.id) {
-            surface.components[comp.id] = comp;
-          }
-        }
-      }
-
-      // v0.8 legacy dataModelUpdate
-      if ('dataModelUpdate' in msg && msg.dataModelUpdate) {
-        for (const item of msg.dataModelUpdate.contents || []) {
-          surface.dataModel[item.key] =
-            item.valueString ?? item.valueNumber ?? item.valueBoolean;
         }
       }
 
@@ -262,20 +239,13 @@ export class AdkService {
     }
 
     // Resolve rootId:
-    // 1. v0.9 specification: exactly one component with id "root"
+    // 1. v1.0 specification: first/root component with id "root"
     if (surface.components['root']) {
       surface.rootId = 'root';
     } else if (!surface.rootId && Object.keys(surface.components).length > 0) {
-      // 2. Fallbacks for named containers or first component
+      // 2. Fallback for Column container or first component
       const keys = Object.keys(surface.components);
-      const rootCandidate = keys.find((k) => {
-        const comp = surface.components[k];
-        if (!comp) return false;
-        if (k === 'root-column' || k === 'main-column') return true;
-        if (comp.component === 'Column') return true;
-        if (typeof comp.component === 'object' && comp.component !== null && 'Column' in comp.component) return true;
-        return false;
-      });
+      const rootCandidate = keys.find((k) => surface.components[k]?.component === 'Column');
       surface.rootId = rootCandidate || keys[0];
     }
   }
