@@ -1,6 +1,6 @@
 import { SurfaceState } from '../types/a2ui';
 
-const ADK_BASE_URL = (import.meta as any).env?.VITE_ADK_URL || 'http://127.0.0.1:8080';
+const ADK_BASE_URL = (import.meta as any).env?.VITE_ADK_URL || '';
 const USER_ID = 'demo_user';
 
 export interface ChatMessage {
@@ -8,6 +8,7 @@ export interface ChatMessage {
   sender: 'user' | 'agent';
   text?: string;
   surfaceState?: SurfaceState;
+  rawMessages?: any[];
 }
 
 export class AdkService {
@@ -76,6 +77,7 @@ export class AdkService {
 
   private parseEvents(events: any[]): ChatMessage {
     let combinedText = '';
+    const collectedRawMessages: any[] = [];
     const surface: SurfaceState = {
       surfaceId: 'default',
       rootId: null,
@@ -83,19 +85,27 @@ export class AdkService {
       dataModel: {},
     };
 
+    let hasUi = false;
+
     for (const evt of events) {
       const parts = evt.content?.parts || [];
       for (const part of parts) {
         if (part.text) {
           combinedText += part.text + '\n';
         }
+        const fnResp = part.functionResponse || part.function_response;
+        const validated = fnResp?.response?.validated_a2ui_json;
+        if (fnResp?.name === 'send_a2ui_json_to_client' && Array.isArray(validated)) {
+          hasUi = true;
+          collectedRawMessages.push(...validated);
+          this.applyMessages(surface, validated);
+        }
       }
     }
 
-    // Match <a2ui-json>...</a2ui-json> blocks
+    // Fallback: match <a2ui-json>...</a2ui-json> blocks (e.g., manual prompt mode)
     const regex = /<a2ui-json>([\s\S]*?)<\/a2ui-json>/g;
     let match;
-    let hasUi = false;
     let cleanText = combinedText;
 
     while ((match = regex.exec(combinedText)) !== null) {
@@ -103,6 +113,7 @@ export class AdkService {
       try {
         const raw = JSON.parse(match[1].trim());
         const messages: any[] = Array.isArray(raw) ? raw : [raw];
+        collectedRawMessages.push(...messages);
         this.applyMessages(surface, messages);
       } catch (err) {
         console.error('Failed to parse A2UI JSON payload:', err);
@@ -119,6 +130,7 @@ export class AdkService {
         try {
           const raw = JSON.parse(jsonCandidate);
           const messages: any[] = Array.isArray(raw) ? raw : [raw];
+          collectedRawMessages.push(...messages);
           this.applyMessages(surface, messages);
           if (surface.rootId) {
             hasUi = true;
@@ -133,8 +145,9 @@ export class AdkService {
     return {
       id: `msg-${Date.now()}`,
       sender: 'agent',
-      text: cleanText || undefined,
+      text: cleanText.trim() || undefined,
       surfaceState: hasUi && surface.rootId ? surface : undefined,
+      rawMessages: collectedRawMessages.length > 0 ? collectedRawMessages : undefined,
     };
   }
 
@@ -142,7 +155,7 @@ export class AdkService {
     for (const msg of messages) {
       if (!msg) continue;
 
-      // v1.0, v0.9 & v0.9.1 createSurface (scoped to active surfaces)
+      // v1.0 createSurface (scoped to active surfaces)
       if ('createSurface' in msg && msg.createSurface) {
         surface.surfaceId = msg.createSurface.surfaceId || surface.surfaceId;
         surface.rootId = null;
@@ -167,7 +180,7 @@ export class AdkService {
         }
       }
 
-      // v0.9 & v0.9.1 deleteSurface (removes active surface, enabling ID reuse)
+      // v1.0 deleteSurface (removes active surface, enabling ID reuse)
       if ('deleteSurface' in msg && msg.deleteSurface) {
         const delId = msg.deleteSurface.surfaceId;
         if (!delId || delId === surface.surfaceId) {
@@ -177,7 +190,7 @@ export class AdkService {
         }
       }
 
-      // v0.9 & v0.9.1 updateComponents
+      // v1.0 updateComponents
       if ('updateComponents' in msg && msg.updateComponents) {
         if (msg.updateComponents.surfaceId) {
           surface.surfaceId = msg.updateComponents.surfaceId;
@@ -192,7 +205,7 @@ export class AdkService {
         }
       }
 
-      // v0.9 updateDataModel
+      // v1.0 updateDataModel
       if ('updateDataModel' in msg && msg.updateDataModel) {
         const val = msg.updateDataModel.value;
         const path = msg.updateDataModel.path;
@@ -203,29 +216,6 @@ export class AdkService {
             const cleanPath = path.replace(/^\//, '');
             surface.dataModel[cleanPath] = val;
           }
-        }
-      }
-
-      // v0.8 legacy beginRendering
-      if ('beginRendering' in msg && msg.beginRendering) {
-        surface.surfaceId = msg.beginRendering.surfaceId || surface.surfaceId;
-        surface.rootId = msg.beginRendering.root || surface.rootId;
-      }
-
-      // v0.8 legacy surfaceUpdate
-      if ('surfaceUpdate' in msg && msg.surfaceUpdate) {
-        for (const comp of msg.surfaceUpdate.components || []) {
-          if (comp?.id) {
-            surface.components[comp.id] = comp;
-          }
-        }
-      }
-
-      // v0.8 legacy dataModelUpdate
-      if ('dataModelUpdate' in msg && msg.dataModelUpdate) {
-        for (const item of msg.dataModelUpdate.contents || []) {
-          surface.dataModel[item.key] =
-            item.valueString ?? item.valueNumber ?? item.valueBoolean;
         }
       }
 
@@ -249,20 +239,13 @@ export class AdkService {
     }
 
     // Resolve rootId:
-    // 1. v0.9 specification: exactly one component with id "root"
+    // 1. v1.0 specification: first/root component with id "root"
     if (surface.components['root']) {
       surface.rootId = 'root';
     } else if (!surface.rootId && Object.keys(surface.components).length > 0) {
-      // 2. Fallbacks for named containers or first component
+      // 2. Fallback for Column container or first component
       const keys = Object.keys(surface.components);
-      const rootCandidate = keys.find((k) => {
-        const comp = surface.components[k];
-        if (!comp) return false;
-        if (k === 'root-column' || k === 'main-column') return true;
-        if (comp.component === 'Column') return true;
-        if (typeof comp.component === 'object' && comp.component !== null && 'Column' in comp.component) return true;
-        return false;
-      });
+      const rootCandidate = keys.find((k) => surface.components[k]?.component === 'Column');
       surface.rootId = rootCandidate || keys[0];
     }
   }
