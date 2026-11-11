@@ -226,7 +226,7 @@ root_agent = Agent(
 ### 4.2 Start the ADK Server in Cloud Shell
 If your terminal pane is minimized, click **Open Terminal** in the top-right toolbar of Cloud Shell. Then start the ADK web server on port **8080**:
 ```bash
-.venv/bin/adk web --port 8080 --allow_origins "*"
+.venv/bin/adk web --port 8080 --allow_origins "*" --reload_agents
 ```
 
 ### 4.3 View in Cloud Shell Web Preview
@@ -1158,27 +1158,22 @@ Open `frontend/src/components/A2UIRenderer.tsx` in Cloud Shell Editor and update
 ```tsx
 // frontend/src/components/A2UIRenderer.tsx
 
-import { useState, useEffect, type FC, type ReactNode } from 'react';
-import { MessageProcessor, basicCatalog } from '@a2ui/web_core/v1_0';
+import { useState, useEffect, type FC } from 'react';
+import { MessageProcessor, basicCatalog, injectBasicCatalogStyles } from '@a2ui/web_core/v1_0';
 import { A2uiSurface } from '@a2ui/react';
 import { culinaryCatalog, CULINARY_CATALOG_ID } from '../catalog/culinaryCatalog';
-import { A2UIComponent, SurfaceState } from '../types/a2ui';
-import { Clock, Star, Flame, ChefHat, AlertCircle } from 'lucide-react';
-import { RecipeDetailCard } from './RecipeDetailCard';
-import { RecipeSummaryCard } from './RecipeSummaryCard';
-import { CookingTimer } from './CookingTimer';
-import { InstructionStepCard } from './InstructionStepCard';
-import { GuidedCookingCard } from './GuidedCookingCard';
-import { DefaultCard } from './DefaultCard';
-import { MarkdownRenderer } from './MarkdownRenderer';
+import { AlertCircle } from 'lucide-react';
+
+if (typeof document !== 'undefined') {
+  injectBasicCatalogStyles();
+}
 
 interface Props {
   messages?: any[];
-  surface?: SurfaceState;
   onAction?: (action: { type: string; parameters?: Record<string, any>; context?: Record<string, any> }) => void;
 }
 
-export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
+export const A2UIRenderer: FC<Props> = ({ messages, onAction }) => {
   const [catalogSurfaces, setCatalogSurfaces] = useState<any[]>([]);
   const [catalogError, setCatalogError] = useState<string | null>(null);
 
@@ -1269,402 +1264,19 @@ export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
     );
   }
 
-  // If official A2UI MessageProcessor successfully validated & built the formal culinaryCatalog surface(s), render via A2uiSurface
-  if (catalogSurfaces.length > 0) {
-    return (
-      <div className="a2ui-surface w-full space-y-4">
-        {catalogSurfaces.map((surf) => (
-          <A2uiSurface key={surf.id} surface={surf as any} />
-        ))}
-      </div>
-    );
-  }
-
-  // Fallback: only when raw A2UI messages were not supplied (e.g., direct SurfaceState rendering)
-  if (!surface || !surface.rootId || !surface.components[surface.rootId]) {
+  if (catalogSurfaces.length === 0) {
     return null;
   }
-
-  const resolveValue = (value: any): string => {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-    const pathRef = value['@path'] ?? value.path;
-    if (pathRef) {
-      const cleanPath = String(pathRef).replace(/^\//, '');
-      if (surface.dataModel[cleanPath] !== undefined) {
-        return String(surface.dataModel[cleanPath]);
-      }
-      if (surface.dataModel[pathRef] !== undefined) {
-        return String(surface.dataModel[pathRef]);
-      }
-    }
-    return '';
-  };
-
-  const getComponentInfo = (item: A2UIComponent): { type: string; props: any } => {
-    if (!item || typeof item.component !== 'string') return { type: '', props: {} };
-    return { type: item.component, props: item };
-  };
-
-  const getChildIds = (props: any): string[] => {
-    if (Array.isArray(props.children)) {
-      return props.children.map(String);
-    }
-    return [];
-  };
-
-  const renderComponent = (componentId: string): ReactNode => {
-    const item: A2UIComponent = surface.components[componentId];
-    if (!item) return null;
-
-    const { type, props } = getComponentInfo(item);
-
-    // Text Primitive
-    if (type === 'Text') {
-      const textVal = resolveValue(props.text);
-      const variant = props.variant;
-      switch (variant) {
-        case 'h1':
-          return (
-            <h1 key={componentId} className="text-xl font-bold text-slate-900 tracking-tight my-1">
-              {textVal}
-            </h1>
-          );
-        case 'h2':
-          return (
-            <h2 key={componentId} className="text-base font-semibold text-slate-800 tracking-tight my-0.5">
-              {textVal}
-            </h2>
-          );
-        case 'h3':
-          return (
-            <h3 key={componentId} className="text-sm font-medium text-slate-700">
-              {textVal}
-            </h3>
-          );
-        case 'badge':
-          return (
-            <span
-              key={componentId}
-              className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
-            >
-              {textVal}
-            </span>
-          );
-        case 'caption':
-          return (
-            <p key={componentId} className="text-xs text-slate-500 leading-relaxed">
-              {textVal}
-            </p>
-          );
-        default:
-          return (
-            <MarkdownRenderer key={componentId} content={textVal} />
-          );
-      }
-    }
-
-    // Card Primitive
-    if (type === 'Card') {
-      const childId = props.child;
-      const childrenIds = getChildIds(props);
-      return (
-        <DefaultCard key={componentId}>
-          {childId ? renderComponent(childId) : null}
-          {childrenIds.map((cid) => renderComponent(cid))}
-        </DefaultCard>
-      );
-    }
-
-    // Column Primitive
-    if (type === 'Column') {
-      const childrenIds = getChildIds(props);
-      const stepItems: { id: string; stepData: any }[] = [];
-      const nonStepIds: string[] = [];
-
-      for (const id of childrenIds) {
-        const comp = surface.components[id];
-        if (comp) {
-          const compInfo = getComponentInfo(comp);
-          if (compInfo.type === 'InstructionStepCard' || compInfo.type === 'StepCard') {
-            stepItems.push({
-              id,
-              stepData: compInfo.props,
-            });
-            continue;
-          }
-        }
-        nonStepIds.push(id);
-      }
-
-      // If there are multiple step cards, render non-step children first, then GuidedCookingCard
-      if (stepItems.length > 1) {
-        const dishName = resolveValue(stepItems[0]?.stepData?.dish);
-        const mappedSteps = stepItems.map((item, idx) => ({
-          step: resolveValue(item.stepData.step) || idx + 1,
-          title: resolveValue(item.stepData.title),
-          instruction: resolveValue(item.stepData.instruction || item.stepData.text || item.stepData.description),
-          duration: resolveValue(item.stepData.duration),
-          timerMinutes: resolveValue(item.stepData.timerMinutes || item.stepData.minutes),
-          dish: resolveValue(item.stepData.dish),
-          tip: resolveValue(item.stepData.tip),
-        }));
-
-        return (
-          <div key={componentId} className="flex flex-col gap-2.5 w-full">
-            {nonStepIds.map((childId) => renderComponent(childId))}
-            <GuidedCookingCard dish={dishName} steps={mappedSteps} onAction={onAction} />
-          </div>
-        );
-      }
-
-      return (
-        <div key={componentId} className="flex flex-col gap-2.5 w-full">
-          {childrenIds.map((childId) => renderComponent(childId))}
-        </div>
-      );
-    }
-
-    // Row Primitive
-    if (type === 'Row') {
-      const childrenIds = getChildIds(props);
-      const justifyAttr = props.justify;
-      const justify =
-        justifyAttr === 'spaceBetween' || justifyAttr === 'space-between'
-          ? 'justify-between'
-          : justifyAttr === 'center'
-          ? 'justify-center'
-          : justifyAttr === 'end'
-          ? 'justify-end'
-          : 'justify-start';
-
-      return (
-        <div
-          key={componentId}
-          className={`flex flex-row items-center gap-2.5 ${justify} flex-wrap w-full`}
-        >
-          {childrenIds.map((childId) => renderComponent(childId))}
-        </div>
-      );
-    }
-
-    // Button Primitive
-    if (type === 'Button') {
-      const childId = props.child;
-      const label = childId ? renderComponent(childId) : resolveValue(props.label || props.text);
-      const action = props.action;
-      const isBorderless = props.variant === 'borderless';
-      return (
-        <button
-          key={componentId}
-          onClick={() => {
-            if (action) {
-              const callType =
-                action.event?.name ||
-                action.functionCall?.['@call'] ||
-                action.functionCall?.call ||
-                action.name ||
-                action.type ||
-                '';
-              const params =
-                action.event?.context ||
-                action.functionCall?.args ||
-                action.context ||
-                action.parameters ||
-                {};
-              onAction?.({ type: callType, parameters: params, context: params });
-            }
-          }}
-          className={
-            isBorderless
-              ? 'inline-flex items-center text-xs font-semibold text-emerald-600 hover:text-emerald-700 transition'
-              : 'inline-flex items-center justify-center px-4 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 rounded-xl border border-slate-200 shadow-sm transition-all focus:outline-none'
-          }
-        >
-          {label}
-        </button>
-      );
-    }
-
-    // Icon Primitive
-    if (type === 'Icon') {
-      const iconName = resolveValue(props.name).toLowerCase();
-      const iconProps = { size: props.size || 16, className: 'inline-block text-amber-500' };
-      if (iconName.includes('clock') || iconName.includes('schedule')) {
-        return <Clock key={componentId} {...iconProps} />;
-      }
-      if (iconName.includes('star')) {
-        return <Star key={componentId} {...iconProps} />;
-      }
-      if (iconName.includes('flame') || iconName.includes('spicy')) {
-        return <Flame key={componentId} {...iconProps} />;
-      }
-      return <ChefHat key={componentId} {...iconProps} />;
-    }
-
-    // Image Primitive
-    if (type === 'Image') {
-      return (
-        <img
-          key={componentId}
-          src={normalizeImageUrl(resolveValue(props.url))}
-          alt={resolveValue(props.alt) || 'Recipe'}
-          className="rounded-xl object-cover max-h-52 w-full mb-2 border border-slate-100"
-        />
-      );
-    }
-
-    // Divider Primitive
-    if (type === 'Divider') {
-      return <hr key={componentId} className="my-2 border-slate-100" />;
-    }
-
-    // List Primitive
-    if (type === 'List') {
-      const childrenIds = getChildIds(props);
-      return (
-        <ul key={componentId} className="list-disc pl-5 text-xs text-slate-600 space-y-1">
-          {childrenIds.map((childId) => (
-            <li key={childId}>{renderComponent(childId)}</li>
-          ))}
-        </ul>
-      );
-    }
-
-    // Custom Component: RecipeSummaryCard
-    if (type === 'RecipeSummaryCard') {
-      return (
-        <RecipeSummaryCard
-          key={componentId}
-          id={resolveValue(props.recipeId || props.id) || componentId}
-          name={resolveValue(props.name)}
-          description={resolveValue(props.description)}
-          cookTime={resolveValue(props.cookTime)}
-          prepTime={resolveValue(props.prepTime)}
-          difficulty={resolveValue(props.difficulty)}
-          calories={resolveValue(props.calories)}
-          cuisine={resolveValue(props.cuisine)}
-          badge={resolveValue(props.badge)}
-          imageUrl={resolveValue(props.imageUrl)}
-          onAction={onAction}
-        />
-      );
-    }
-
-    // Custom Component: RecipeDetailCard
-    if (type === 'RecipeDetailCard') {
-      let ingList: string[] = [];
-      if (Array.isArray(props.ingredients)) {
-        ingList = props.ingredients.map((ing: any) => resolveValue(ing));
-      } else if (props.ingredients && 'path' in props.ingredients && surface.dataModel[props.ingredients.path]) {
-        const fromModel = surface.dataModel[props.ingredients.path];
-        ingList = Array.isArray(fromModel) ? fromModel.map(String) : [];
-      }
-
-      return (
-        <RecipeDetailCard
-          key={componentId}
-          id={resolveValue(props.recipeId || props.id) || componentId}
-          name={resolveValue(props.name)}
-          description={resolveValue(props.description)}
-          prepTime={resolveValue(props.prepTime)}
-          cookTime={resolveValue(props.cookTime)}
-          servings={resolveValue(props.servings)}
-          difficulty={resolveValue(props.difficulty)}
-          calories={resolveValue(props.calories)}
-          cuisine={resolveValue(props.cuisine)}
-          badge={resolveValue(props.badge)}
-          imageUrl={resolveValue(props.imageUrl)}
-          ingredients={ingList}
-          showCookButton={props.showCookButton ?? true}
-          onAction={onAction}
-        />
-      );
-    }
-
-    // Custom Component: CookingTimer
-    if (type === 'CookingTimer') {
-      return (
-        <CookingTimer
-          key={componentId}
-          minutes={resolveValue(props.minutes) || 5}
-          label={resolveValue(props.label)}
-          dish={resolveValue(props.dish)}
-        />
-      );
-    }
-
-    // Custom Component: InstructionStepCard
-    if (type === 'InstructionStepCard' || type === 'StepCard') {
-      return (
-        <InstructionStepCard
-          key={componentId}
-          step={resolveValue(props.step)}
-          totalSteps={resolveValue(props.totalSteps)}
-          title={resolveValue(props.title)}
-          instruction={resolveValue(props.instruction || props.text || props.description)}
-          duration={resolveValue(props.duration)}
-          timerMinutes={resolveValue(props.timerMinutes || props.minutes)}
-          dish={resolveValue(props.dish)}
-          tip={resolveValue(props.tip)}
-          isLastStep={Boolean(props.isLastStep)}
-          onAction={onAction}
-        />
-      );
-    }
-
-    // Custom Component: GuidedCookingCard
-    if (type === 'GuidedCookingCard') {
-      return (
-        <GuidedCookingCard
-          key={componentId}
-          dish={resolveValue(props.dish || props.recipeName)}
-          steps={props.steps || []}
-          onAction={onAction}
-        />
-      );
-    }
-
-    // Custom Component: DefaultCard
-    if (type === 'DefaultCard') {
-      return (
-        <DefaultCard
-          key={componentId}
-          title={resolveValue(props.title)}
-          text={resolveValue(props.text || props.content || props.body)}
-        />
-      );
-    }
-
-    // Fallback if no specialized card matched: render default card
-    const fallbackText =
-      resolveValue(props.text) ||
-      resolveValue(props.content) ||
-      resolveValue(props.message) ||
-      resolveValue(props.description);
-
-    if (fallbackText) {
-      return (
-        <DefaultCard
-          key={componentId}
-          title={resolveValue(props.title)}
-          text={fallbackText}
-        />
-      );
-    }
-
-    return null;
-  };
 
   return (
-    <div className="a2ui-surface w-full">
-      {renderComponent(surface.rootId)}
+    <div className="a2ui-surface w-full space-y-4">
+      {catalogSurfaces.map((surf) => (
+        <A2uiSurface key={surf.id} surface={surf as any} />
+      ))}
     </div>
   );
 };
 ```
-
 ---
 
 ## 9. Test the Three-Stage Culinary Flow
@@ -1798,7 +1410,7 @@ Open **two Cloud Shell terminal tabs** (click the **`+`** icon on the Cloud Shel
 cd ~/a2uirecipe
 source .venv/bin/activate
 export RECIPE_STAGE=3
-.venv/bin/adk web --port 8080 --allow_origins "*"
+.venv/bin/adk web --port 8080 --allow_origins "*" --reload_agents
 ```
 
 #### In Tab 2: Start React Frontend

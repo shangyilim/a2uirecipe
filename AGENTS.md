@@ -83,11 +83,9 @@ All **v0.8 and v0.9 legacy code has been removed** from `frontend/src/`:
 `App.tsx` includes a header toggle (`rendererMode`: `'custom'` vs `'default'`):
 
 1. **Custom Catalog Mode — `frontend/src/components/A2UIRenderer.tsx`**
-   - Instantiates `new MessageProcessor([culinaryCatalog])` (**does NOT include `basicCatalog`**).
+   - Calls `injectBasicCatalogStyles()` and instantiates `new MessageProcessor([culinaryCatalog])` (**does NOT include `basicCatalog`**).
    - **Strict rejection on catalog mismatch**: If `messages` contains `createSurface.catalogId === basicCatalog.id`, or if `MessageProcessor([culinaryCatalog])` throws/fails to build a surface, `A2UIRenderer` sets `catalogError` and renders a red **`Catalog Mismatch Error`** alert (`role="alert"`) instead of falling back to `BasicCatalog` primitives.
-   - Because backend `SendA2uiToClientToolset` guarantees v1.0 compliance, no client-side schema normalization (`sanitizeIdentifier`, `prepareMessageForCatalog`, `usageHint` mapping, etc.) exists here.
-   - `renderComponent` (`surface`-only fallback) is only used if raw `messages` were not provided.
-   - `renderComponent` only supports v1.0 flat discriminator syntax (`typeof item.component === 'string'`, `props.children` array, `props.variant`, `props.justify`, `props.url`, `action.event` / `action.functionCall`).
+   - Because backend `SendA2uiToClientToolset` guarantees v1.0 compliance and `culinaryCatalog` derives from `basicCatalog` for standard layout wrappers (`Column`, `Row`, `Text`, `Button`, etc.), no client-side schema normalization or manual `renderComponent` fallback exists here.
 
 2. **Default Renderer Mode — `frontend/src/components/DefaultA2UIRenderer.tsx`**
    - Strictly Stage 3 (`BasicCatalog` only).
@@ -100,7 +98,7 @@ All **v0.8 and v0.9 legacy code has been removed** from `frontend/src/`:
 - `RecipeDetailCard.tsx`: Full ingredients list + cook button.
 - `GuidedCookingCard.tsx` + `CookingTimer.tsx`: Bundles all cooking steps into one card with client-side **Next** / **Previous** pagination (zero extra LLM turns) and interactive countdown timers when `timerMinutes` is present. Uses `finish_cooking` at completion.
 - `DefaultCard.tsx` + `MarkdownRenderer.tsx`: Markdown card using `marked`.
-- `InstructionStepCard.tsx` + `InstructionStepFlow.tsx`: Supporting step-card primitives retained for fallback rendering.
+- `InstructionStepCard.tsx` + `InstructionStepFlow.tsx`: Unused step-card components left in `components/` from earlier standalone step rendering (replaced by `GuidedCookingCard.tsx`).
 - `App.tsx` (`handleAction`): Converts `view_recipe`, `start_cooking`, and `finish_cooking` action events into follow-up ADK prompts (`next_step` is a no-op).
 
 ---
@@ -121,7 +119,7 @@ All **v0.8 and v0.9 legacy code has been removed** from `frontend/src/`:
 
 - **Run ADK Backend (port 8080)**:
   ```bash
-  .venv/bin/adk web --port 8080 --allow_origins "*"
+  .venv/bin/adk web --port 8080 --allow_origins "*" --reload_agents
   ```
 - **Verify Backend Imports & Toolset**:
   ```bash
