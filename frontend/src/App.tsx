@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { adkService, ChatMessage } from './services/adkService';
 import { A2UIRenderer } from './components/A2UIRenderer';
+import { DefaultA2UIRenderer } from './components/DefaultA2UIRenderer';
 import { MarkdownRenderer } from './components/MarkdownRenderer';
 import { Send, UtensilsCrossed, Loader2, RefreshCw, Sparkles, ChefHat } from 'lucide-react';
 
 export default function App() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [rendererMode, setRendererMode] = useState<'custom' | 'default'>('custom');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -57,12 +59,13 @@ export default function App() {
 
   const handleAction = (action: { type: string; parameters?: Record<string, any>; context?: Record<string, any> }) => {
     const params = action.context || action.parameters || {};
+    const recipeName = params.recipe_name || params.recipeName || params.recipe || params.dish || params.name || 'this recipe';
     if (action.type === 'view_recipe') {
-      handleSend(`Please show me the full recipe details and ingredients for ${params.recipe_name}.`);
+      handleSend(`Please show me the full recipe details and ingredients for ${recipeName}.`);
       return;
     }
     if (action.type === 'start_cooking') {
-      handleSend(`Let's cook the ${params.recipe_name}. Guide me with the cooking steps!`);
+      handleSend(`Let's cook the ${recipeName}. Guide me with the cooking steps!`);
       return;
     }
     if (action.type === 'next_step') {
@@ -70,11 +73,11 @@ export default function App() {
       return;
     }
     if (action.type === 'finish_cooking') {
-      handleSend(`I've completed all cooking steps for ${params.recipe_name || 'this dish'}! How should I plate and serve it?`);
+      handleSend(`I've completed all cooking steps for ${recipeName}! How should I plate and serve it?`);
       return;
     }
-    const actionPrompt = params.recipe_name
-      ? `Let's cook the ${params.recipe_name}. Guide me step by step!`
+    const actionPrompt = recipeName !== 'this recipe'
+      ? `Let's cook the ${recipeName}. Guide me step by step!`
       : `I selected action: ${action.type}`;
     handleSend(actionPrompt);
   };
@@ -107,21 +110,46 @@ export default function App() {
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            setMessages([
-              {
-                id: `welcome-${Date.now()}`,
-                sender: 'agent',
-                text: "✨ Reset session. What would you like to cook today?",
-              },
-            ]);
-          }}
-          title="Clear Chat"
-          className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
-        >
-          <RefreshCw size={18} />
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-medium border border-slate-200/60">
+            <button
+              onClick={() => setRendererMode('default')}
+              className={`px-2.5 py-1 rounded-lg transition ${
+                rendererMode === 'default'
+                  ? 'bg-white text-emerald-700 shadow-xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Default (@a2ui/react)
+            </button>
+            <button
+              onClick={() => setRendererMode('custom')}
+              className={`px-2.5 py-1 rounded-lg transition ${
+                rendererMode === 'custom'
+                  ? 'bg-white text-emerald-700 shadow-xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Custom Catalog
+            </button>
+          </div>
+
+          <button
+            onClick={() => {
+              setMessages([
+                {
+                  id: `welcome-${Date.now()}`,
+                  sender: 'agent',
+                  text: "✨ Reset session. What would you like to cook today?",
+                },
+              ]);
+            }}
+            title="Clear Chat"
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+          >
+            <RefreshCw size={18} />
+          </button>
+        </div>
       </header>
 
       {/* Main Chat Thread */}
@@ -156,9 +184,19 @@ export default function App() {
                 )
               )}
 
-              {msg.surfaceState && (
+              {rendererMode === 'default' && msg.rawMessages && (
                 <div className={`${msg.text ? 'mt-3 pt-3 border-t border-slate-100' : ''}`}>
-                  <A2UIRenderer surface={msg.surfaceState} onAction={handleAction} />
+                  <DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} />
+                </div>
+              )}
+
+              {rendererMode === 'custom' && (msg.rawMessages || msg.surfaceState) && (
+                <div className={`${msg.text ? 'mt-3 pt-3 border-t border-slate-100' : ''}`}>
+                  <A2UIRenderer
+                    messages={msg.rawMessages}
+                    surface={msg.surfaceState}
+                    onAction={handleAction}
+                  />
                 </div>
               )}
             </div>
