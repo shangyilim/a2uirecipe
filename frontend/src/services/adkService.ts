@@ -1,6 +1,6 @@
 import { SurfaceState } from '../types/a2ui';
 
-const ADK_BASE_URL = (import.meta as any).env?.VITE_ADK_URL || 'http://127.0.0.1:8080';
+const ADK_BASE_URL = (import.meta as any).env?.VITE_ADK_URL || '';
 const USER_ID = 'demo_user';
 
 export interface ChatMessage {
@@ -8,6 +8,7 @@ export interface ChatMessage {
   sender: 'user' | 'agent';
   text?: string;
   surfaceState?: SurfaceState;
+  rawMessages?: any[];
 }
 
 export class AdkService {
@@ -76,6 +77,7 @@ export class AdkService {
 
   private parseEvents(events: any[]): ChatMessage {
     let combinedText = '';
+    const collectedRawMessages: any[] = [];
     const surface: SurfaceState = {
       surfaceId: 'default',
       rootId: null,
@@ -83,19 +85,27 @@ export class AdkService {
       dataModel: {},
     };
 
+    let hasUi = false;
+
     for (const evt of events) {
       const parts = evt.content?.parts || [];
       for (const part of parts) {
         if (part.text) {
           combinedText += part.text + '\n';
         }
+        const fnResp = part.functionResponse || part.function_response;
+        const validated = fnResp?.response?.validated_a2ui_json;
+        if (fnResp?.name === 'send_a2ui_json_to_client' && Array.isArray(validated)) {
+          hasUi = true;
+          collectedRawMessages.push(...validated);
+          this.applyMessages(surface, validated);
+        }
       }
     }
 
-    // Match <a2ui-json>...</a2ui-json> blocks
+    // Fallback: match <a2ui-json>...</a2ui-json> blocks (e.g., manual prompt mode)
     const regex = /<a2ui-json>([\s\S]*?)<\/a2ui-json>/g;
     let match;
-    let hasUi = false;
     let cleanText = combinedText;
 
     while ((match = regex.exec(combinedText)) !== null) {
@@ -103,6 +113,7 @@ export class AdkService {
       try {
         const raw = JSON.parse(match[1].trim());
         const messages: any[] = Array.isArray(raw) ? raw : [raw];
+        collectedRawMessages.push(...messages);
         this.applyMessages(surface, messages);
       } catch (err) {
         console.error('Failed to parse A2UI JSON payload:', err);
@@ -119,6 +130,7 @@ export class AdkService {
         try {
           const raw = JSON.parse(jsonCandidate);
           const messages: any[] = Array.isArray(raw) ? raw : [raw];
+          collectedRawMessages.push(...messages);
           this.applyMessages(surface, messages);
           if (surface.rootId) {
             hasUi = true;
@@ -133,8 +145,9 @@ export class AdkService {
     return {
       id: `msg-${Date.now()}`,
       sender: 'agent',
-      text: cleanText || undefined,
+      text: cleanText.trim() || undefined,
       surfaceState: hasUi && surface.rootId ? surface : undefined,
+      rawMessages: collectedRawMessages.length > 0 ? collectedRawMessages : undefined,
     };
   }
 

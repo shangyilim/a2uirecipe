@@ -30,7 +30,7 @@ RECIPES = [
         ],
         "dietary": ["Nut-Free"],
         "badge": "Chef's Choice",
-        "image_url": "http://127.0.0.1:8080/images/carbonara.jpg",
+        "image_url": "/images/carbonara.jpg",
     },
     {
         "id": "thai-basil-chicken",
@@ -64,7 +64,7 @@ RECIPES = [
         ],
         "dietary": ["Dairy-Free", "High-Protein"],
         "badge": "Fast & Spicy",
-        "image_url": "http://127.0.0.1:8080/images/pad_krapow.jpg",
+        "image_url": "/images/pad_krapow.jpg",
     },
     {
         "id": "mediterranean-quinoa-salad",
@@ -98,7 +98,7 @@ RECIPES = [
         ],
         "dietary": ["Vegetarian", "Gluten-Free"],
         "badge": "Healthy & Fresh",
-        "image_url": "http://127.0.0.1:8080/images/quinoa_bowl.jpg",
+        "image_url": "/images/quinoa_bowl.jpg",
     },
     {
         "id": "creamy-tuscan-salmon",
@@ -131,7 +131,7 @@ RECIPES = [
         ],
         "dietary": ["Keto", "Gluten-Free", "Low-Carb"],
         "badge": "Gourmet Dinner",
-        "image_url": "http://127.0.0.1:8080/images/tuscan_salmon.jpg",
+        "image_url": "/images/tuscan_salmon.jpg",
     },
     {
         "id": "berry-chia-parfait",
@@ -162,7 +162,7 @@ RECIPES = [
         ],
         "dietary": ["Vegan", "Gluten-Free", "Dairy-Free"],
         "badge": "Make-Ahead",
-        "image_url": "http://127.0.0.1:8080/images/berry_parfait.jpg",
+        "image_url": "/images/berry_parfait.jpg",
     },
 ]
 

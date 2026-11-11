@@ -1,4 +1,7 @@
-import type { FC, ReactNode } from 'react';
+import { useState, useEffect, type FC, type ReactNode } from 'react';
+import { MessageProcessor, basicCatalog } from '@a2ui/web_core/v1_0';
+import { A2uiSurface } from '@a2ui/react';
+import { culinaryCatalog } from '../catalog/culinaryCatalog';
 import { A2UIComponent, SurfaceState } from '../types/a2ui';
 import { Clock, Star, Flame, ChefHat } from 'lucide-react';
 import { RecipeDetailCard } from './RecipeDetailCard';
@@ -10,12 +13,75 @@ import { DefaultCard } from './DefaultCard';
 import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface Props {
-  surface: SurfaceState;
+  messages?: any[];
+  surface?: SurfaceState;
   onAction?: (action: { type: string; parameters?: Record<string, any>; context?: Record<string, any> }) => void;
 }
 
-export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
-  if (!surface.rootId || !surface.components[surface.rootId]) {
+export const A2UIRenderer: FC<Props> = ({ messages, surface, onAction }) => {
+  const [catalogSurfaces, setCatalogSurfaces] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!messages || messages.length === 0) {
+      setCatalogSurfaces([]);
+      return;
+    }
+
+    const processor = new MessageProcessor([culinaryCatalog, basicCatalog]);
+    const actionSubs: Array<{ unsubscribe: () => void }> = [];
+
+    const sync = () => {
+      const activeSurfaces = Array.from(processor.model.surfacesMap.values());
+      setCatalogSurfaces(activeSurfaces);
+
+      actionSubs.forEach((sub) => sub.unsubscribe());
+      actionSubs.length = 0;
+
+      for (const surf of activeSurfaces) {
+        const sub = (surf as any).onAction.subscribe((actionEvent: any) => {
+          const actionName = actionEvent.name || actionEvent.type || 'action';
+          const params = actionEvent.context || actionEvent.parameters || {};
+          onAction?.({
+            type: actionName,
+            parameters: params,
+            context: params,
+          });
+        });
+        actionSubs.push(sub);
+      }
+    };
+
+    const createdSub = processor.onSurfaceCreated(sync);
+    const deletedSub = processor.onSurfaceDeleted(sync);
+
+    try {
+      processor.processMessages(messages);
+      sync();
+    } catch (err) {
+      console.warn('Formal Culinary Catalog processor fallback triggered:', err);
+      setCatalogSurfaces([]);
+    }
+
+    return () => {
+      createdSub.unsubscribe();
+      deletedSub.unsubscribe();
+      actionSubs.forEach((sub) => sub.unsubscribe());
+    };
+  }, [messages, onAction]);
+
+  // If official A2UI MessageProcessor successfully validated & built the formal culinaryCatalog surface(s), render via A2uiSurface
+  if (catalogSurfaces.length > 0) {
+    return (
+      <div className="a2ui-surface w-full space-y-4">
+        {catalogSurfaces.map((surf) => (
+          <A2uiSurface key={surf.id} surface={surf as any} />
+        ))}
+      </div>
+    );
+  }
+
+  // Fallback: render directly from parsed SurfaceState if messages were absent or failed schema validation
+  if (!surface || !surface.rootId || !surface.components[surface.rootId]) {
     return null;
   }
 
@@ -37,6 +103,11 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
       }
     }
     return '';
+  };
+
+  const normalizeImageUrl = (url?: string): string => {
+    if (!url) return '';
+    return url.replace(/^http:\/\/(?:127\.0\.0\.1|localhost):8080/, '');
   };
 
   const getComponentInfo = (item: A2UIComponent): { type: string; props: any } => {
@@ -117,9 +188,11 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
     // Card Primitive
     if (type === 'Card') {
       const childId = props.child;
+      const childrenIds = getChildIds(props);
       return (
         <DefaultCard key={componentId}>
           {childId ? renderComponent(childId) : null}
+          {childrenIds.map((cid) => renderComponent(cid))}
         </DefaultCard>
       );
     }
@@ -198,7 +271,8 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
 
     // Button Primitive
     if (type === 'Button') {
-      const label = resolveValue(props.label || props.text);
+      const childId = props.child;
+      const label = childId ? renderComponent(childId) : resolveValue(props.label || props.text);
       const action = props.action;
       const isBorderless = props.variant === 'borderless';
       return (
@@ -207,16 +281,19 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
           onClick={() => {
             if (action) {
               const callType =
+                action.event?.name ||
+                action.name ||
                 action['@call'] ||
                 action.call ||
                 action.callAgentFunction?.function ||
                 action.type ||
                 '';
               const params =
+                action.event?.context ||
+                action.context ||
                 action.args ||
                 action.callAgentFunction?.arguments ||
                 action.parameters ||
-                action.context ||
                 {};
               onAction?.({ type: callType, parameters: params, context: params });
             }
@@ -253,7 +330,7 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
       return (
         <img
           key={componentId}
-          src={resolveValue(props.url || props.src)}
+          src={normalizeImageUrl(resolveValue(props.url || props.src))}
           alt={resolveValue(props.alt) || 'Recipe'}
           className="rounded-xl object-cover max-h-52 w-full mb-2 border border-slate-100"
         />
@@ -291,7 +368,7 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
           calories={resolveValue(props.calories)}
           cuisine={resolveValue(props.cuisine)}
           badge={resolveValue(props.badge)}
-          imageUrl={resolveValue(props.imageUrl)}
+          imageUrl={normalizeImageUrl(resolveValue(props.imageUrl))}
           onAction={onAction}
         />
       );
@@ -320,7 +397,7 @@ export const A2UIRenderer: FC<Props> = ({ surface, onAction }) => {
           calories={resolveValue(props.calories)}
           cuisine={resolveValue(props.cuisine)}
           badge={resolveValue(props.badge)}
-          imageUrl={resolveValue(props.imageUrl)}
+          imageUrl={normalizeImageUrl(resolveValue(props.imageUrl))}
           ingredients={ingList}
           showCookButton={props.showCookButton ?? true}
           onAction={onAction}

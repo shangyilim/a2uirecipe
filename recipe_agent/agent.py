@@ -2,15 +2,12 @@
 
 import os
 from google.adk.agents import Agent
-from google.adk.agents.callback_context import CallbackContext
 from google.adk.models import Gemini
-from google.adk.models.llm_response import LlmResponse
 from google.genai import types
-from a2ui.adk import A2uiInstruction
-from a2ui.core.basic_catalog import BasicCatalog
-from a2ui.core.schema import ProtocolVersion
+from a2ui.adk import A2uiInstruction, SendA2uiToClientToolset
 from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
 from a2ui.processor import A2uiRequestProcessor
+from .catalog import CULINARY_CATALOG_ID, create_culinary_catalog
 from .recipes import get_recipes
 
 
@@ -24,7 +21,7 @@ gemini_model = Gemini(
 
 
 processor = A2uiRequestProcessor(
-    [BasicCatalog(ProtocolVersion.V1_0)],
+    [create_culinary_catalog()],
     format_factory=DirectJsonFormatFactory(),
 )
 
@@ -57,19 +54,23 @@ UI_DESCRIPTION = (
     "### A2UI v1.0 Component Specifications:\n"
     "Construct rich A2UI v1.0 surfaces following these rules:\n"
     "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
-    "2. A2UI v1.0 ENVELOPE: Set \"version\": \"1.0\" in each A2UI message.\n"
+    f"2. A2UI v1.0 ENVELOPE & CATALOG: Set \"version\": \"1.0\" in each A2UI message and \"catalogId\": \"{CULINARY_CATALOG_ID}\" in createSurface.\n"
     "3. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
-    "4. FLAT v1.0 COMPONENT MODEL: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object.\n\n"
-    "5. Root Container Example:\n"
+    "4. FLAT v1.0 COMPONENT MODEL & UAX #31 IDENTIFIERS: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object. Component IDs MUST be valid UAX #31 identifiers (use letters, numbers, and underscores like 'header_text', 'recipe_summary_1'; NEVER use hyphens '-').\n"
+    "5. BUTTON ACTIONS: Every 'Button' component MUST have a valid v1.0 action with the exact recipe name in context:\n"
+    "   - View Button: \"action\": {\"event\": {\"name\": \"view_recipe\", \"context\": {\"recipe_name\": \"<exact recipe name>\"}}}\n"
+    "   - Cook Button: \"action\": {\"event\": {\"name\": \"start_cooking\", \"context\": {\"recipe_name\": \"<exact recipe name>\"}}}\n"
+    "   Always supply the exact recipe name from the tool in the context object.\n\n"
+    "6. Root Container Example:\n"
     "{\n"
     '  "id": "root",\n'
     '  "component": "Column",\n'
-    '  "children": ["recipe-summary-1", "recipe-summary-2"],\n'
+    '  "children": ["recipe_summary_1", "recipe_summary_2"],\n'
     '  "justify": "start"\n'
     "}\n\n"
-    "6. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
+    "7. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
     "{\n"
-    '  "id": "recipe-summary-<id>",\n'
+    '  "id": "recipe_summary_<id>",\n'
     '  "component": "RecipeSummaryCard",\n'
     '  "recipeId": "<recipe.id>",\n'
     '  "name": "<recipe.name>",\n'
@@ -82,9 +83,9 @@ UI_DESCRIPTION = (
     '  "badge": "<recipe.badge>",\n'
     '  "imageUrl": "<recipe.image_url>"\n'
     "}\n\n"
-    "7. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
+    "8. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
     "{\n"
-    '  "id": "recipe-detail-<id>",\n'
+    '  "id": "recipe_detail_<id>",\n'
     '  "component": "RecipeDetailCard",\n'
     '  "recipeId": "<recipe.id>",\n'
     '  "name": "<recipe.name>",\n'
@@ -100,10 +101,10 @@ UI_DESCRIPTION = (
     '  "ingredients": <recipe.ingredients>,\n'
     '  "showCookButton": true\n'
     "}\n\n"
-    "8. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
+    "9. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
     "Bundle ALL steps for the recipe in a single GuidedCookingCard so the user navigates locally with Next and Previous buttons:\n"
     "{\n"
-    '  "id": "guided-cooking-1",\n'
+    '  "id": "guided_cooking_1",\n'
     '  "component": "GuidedCookingCard",\n'
     '  "dish": "Classic Roman Carbonara",\n'
     '  "steps": [\n'
@@ -147,15 +148,15 @@ UI_DESCRIPTION = (
     '    }\n'
     '  ]\n'
     "}\n\n"
-    "9. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
+    "10. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
     "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown:\n"
     "{\n"
-    '  "id": "info-card-1",\n'
+    '  "id": "info_card_1",\n'
     '  "component": "DefaultCard",\n'
     '  "title": "Chef\'s Tip & Dietary Notes",\n'
     '  "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and starchy water creates the silky texture.\\n- **Toast the pepper**: Toasted black pepper releases fragrant essential oils."\n'
     "}\n\n"
-    "Wrap your A2UI JSON array inside <a2ui-json> and </a2ui-json> tags."
+    "Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool with a valid payload matching the catalog schema."
 )
 
 a2ui_instruction = A2uiInstruction(
@@ -167,21 +168,10 @@ a2ui_instruction = A2uiInstruction(
     a2ui_processor=processor,
 )
 
-
-def show_raw_json(
-    callback_context: CallbackContext,
-    llm_response: LlmResponse,
-) -> LlmResponse | None:
-    if not llm_response.content or not llm_response.content.parts:
-        return None
-    for part in llm_response.content.parts:
-        if part.text:
-            part.text = (
-                part.text
-                .replace("<a2ui-json>", "```json\n")
-                .replace("</a2ui-json>", "\n```")
-            )
-    return llm_response
+a2ui_toolset = SendA2uiToClientToolset(
+    a2ui_enabled=True,
+    a2ui_processor=processor,
+)
 
 
 root_agent = Agent(
@@ -189,5 +179,5 @@ root_agent = Agent(
     name="recipe_assistant",
     description="A culinary assistant that renders rich A2UI recipe interfaces.",
     instruction=a2ui_instruction,
-    tools=[get_recipes],
+    tools=[get_recipes, a2ui_toolset],
 )
