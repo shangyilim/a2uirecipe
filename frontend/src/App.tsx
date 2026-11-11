@@ -49,7 +49,7 @@ export default function App() {
         {
           id: `error-${Date.now()}`,
           sender: 'agent',
-          text: `⚠️ Error connecting to ADK agent: ${err.message}.\nMake sure the ADK server is running: \`.venv/bin/adk web --port 8080 --allow_origins "*"\``,
+          text: `⚠️ Error connecting to ADK agent: ${err.message}.\nMake sure the ADK server is running: \`.venv/bin/adk web --port 8080 --allow_origins "*" --reload_agents\``,
         },
       ]);
     } finally {
@@ -190,13 +190,9 @@ export default function App() {
                 </div>
               )}
 
-              {rendererMode === 'custom' && (msg.rawMessages || msg.surfaceState) && (
+              {rendererMode === 'custom' && msg.rawMessages && (
                 <div className={`${msg.text ? 'mt-3 pt-3 border-t border-slate-100' : ''}`}>
-                  <A2UIRenderer
-                    messages={msg.rawMessages}
-                    surface={msg.surfaceState}
-                    onAction={handleAction}
-                  />
+                  <A2UIRenderer messages={msg.rawMessages} onAction={handleAction} />
                 </div>
               )}
             </div>
