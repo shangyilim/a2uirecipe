@@ -9,6 +9,7 @@ from google.genai import types
 from a2ui.adk import A2uiInstruction, SendA2uiToClientToolset
 from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
 from a2ui.processor import A2uiRequestProcessor
+from a2ui.utils.renderer_state import RendererState
 from .catalog import CULINARY_CATALOG_ID, create_culinary_catalog
 from .recipes import get_recipes
 
@@ -21,17 +22,27 @@ gemini_model = Gemini(
     retry_options=types.HttpRetryOptions(attempts=5),
 )
 
-# # basic catalog
-# processor = A2uiRequestProcessor(
-#     [BasicCatalog(ProtocolVersion.V1_0)],
-#     format_factory=DirectJsonFormatFactory(),
-# )
+catalogs = [create_culinary_catalog()]
 
-# custom catalog
+# Stateless processor used to build system instructions for A2uiInstruction.
 processor = A2uiRequestProcessor(
-    [create_culinary_catalog()],
+    catalogs,
     format_factory=DirectJsonFormatFactory(),
 )
+
+
+def create_turn_processor(_ctx=None) -> A2uiRequestProcessor:
+    """Create a fresh per-turn processor with an empty RendererState.
+
+    Each chat bubble renders an independent surface, so binding a fresh
+    RendererState per tool call enforces that every response creates the
+    surface(s) it updates and rejects orphan updateComponents calls.
+    """
+    return A2uiRequestProcessor(
+        catalogs,
+        format_factory=DirectJsonFormatFactory(),
+        state=RendererState(catalogs),
+    )
 
 ROLE_DESCRIPTION = (
     "You are an expert culinary assistant and interactive recipe dashboard. "
@@ -59,112 +70,13 @@ WORKFLOW_DESCRIPTION = (
 )
 
 UI_DESCRIPTION = (
-    "### A2UI v1.0 Component Specifications:\n"
-    "Construct rich A2UI v1.0 surfaces following these rules:\n"
-    "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
-    f"2. A2UI v1.0 ENVELOPE & CATALOG: Set \"version\": \"1.0\" in each A2UI message and \"catalogId\": \"{CULINARY_CATALOG_ID}\" in createSurface.\n"
-    "3. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
-    "4. FLAT v1.0 COMPONENT MODEL & UAX #31 IDENTIFIERS: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object. Component IDs MUST be valid UAX #31 identifiers (use letters, numbers, and underscores like 'header_text', 'recipe_summary_1'; NEVER use hyphens '-').\n"
-    "5. BUTTON ACTIONS: Every 'Button' component MUST have a valid v1.0 action with the exact recipe name in context:\n"
-    "   - View Button: \"action\": {\"event\": {\"name\": \"view_recipe\", \"context\": {\"recipe_name\": \"<exact recipe name>\"}}}\n"
-    "   - Cook Button: \"action\": {\"event\": {\"name\": \"start_cooking\", \"context\": {\"recipe_name\": \"<exact recipe name>\"}}}\n"
-    "   Always supply the exact recipe name from the tool in the context object.\n\n"
-    "6. Root Container Example:\n"
-    "{\n"
-    '  "id": "root",\n'
-    '  "component": "Column",\n'
-    '  "children": ["recipe_summary_1", "recipe_summary_2"],\n'
-    '  "justify": "start"\n'
-    "}\n\n"
-    "7. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
-    "{\n"
-    '  "id": "recipe_summary_<id>",\n'
-    '  "component": "RecipeSummaryCard",\n'
-    '  "recipeId": "<recipe.id>",\n'
-    '  "name": "<recipe.name>",\n'
-    '  "description": "<recipe.description>",\n'
-    '  "cookTime": "<recipe.cook_time>",\n'
-    '  "prepTime": "<recipe.prep_time>",\n'
-    '  "difficulty": "<recipe.difficulty>",\n'
-    '  "calories": "<recipe.calories>",\n'
-    '  "cuisine": "<recipe.cuisine>",\n'
-    '  "badge": "<recipe.badge>",\n'
-    '  "imageUrl": "<recipe.image_url>"\n'
-    "}\n\n"
-    "8. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
-    "{\n"
-    '  "id": "recipe_detail_<id>",\n'
-    '  "component": "RecipeDetailCard",\n'
-    '  "recipeId": "<recipe.id>",\n'
-    '  "name": "<recipe.name>",\n'
-    '  "description": "<recipe.description>",\n'
-    '  "prepTime": "<recipe.prep_time>",\n'
-    '  "cookTime": "<recipe.cook_time>",\n'
-    '  "servings": <recipe.servings>,\n'
-    '  "difficulty": "<recipe.difficulty>",\n'
-    '  "calories": "<recipe.calories>",\n'
-    '  "cuisine": "<recipe.cuisine>",\n'
-    '  "badge": "<recipe.badge>",\n'
-    '  "imageUrl": "<recipe.image_url>",\n'
-    '  "ingredients": <recipe.ingredients>,\n'
-    '  "showCookButton": true\n'
-    "}\n\n"
-    "9. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
-    "Bundle ALL steps for the recipe in a single GuidedCookingCard so the user navigates locally with Next and Previous buttons:\n"
-    "{\n"
-    '  "id": "guided_cooking_1",\n'
-    '  "component": "GuidedCookingCard",\n'
-    '  "dish": "Classic Roman Carbonara",\n'
-    '  "steps": [\n'
-    '    {\n'
-    '      "step": 1,\n'
-    '      "title": "Boil Pasta until Al Dente",\n'
-    '      "instruction": "Bring a large pot of salted water to a gentle boil and cook spaghetti until al dente.",\n'
-    '      "duration": "10 mins",\n'
-    '      "timerMinutes": 10,\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Save 1/2 cup of starchy pasta water before draining!"\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 2,\n'
-    '      "title": "Crisp the Guanciale",\n'
-    '      "instruction": "In a large skillet, cook sliced guanciale over medium heat until golden and crispy.",\n'
-    '      "duration": "5 mins",\n'
-    '      "timerMinutes": 5,\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Render fat slowly for extra crunch."\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 3,\n'
-    '      "title": "Whisk Egg and Cheese Mixture",\n'
-    '      "instruction": "In a bowl, whisk whole eggs, egg yolks, grated Pecorino Romano, and freshly cracked black pepper.",\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Whisk until a thick, creamy paste forms."\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 4,\n'
-    '      "title": "Combine Pasta and Guanciale",\n'
-    '      "instruction": "Transfer al dente pasta into the skillet with guanciale and toss to coat in rendered fat off the heat.",\n'
-    '      "dish": "Classic Roman Carbonara"\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 5,\n'
-    '      "title": "Emulsify Carbonara Sauce",\n'
-    '      "instruction": "Off the heat, quickly pour in egg mixture while vigorously tossing pasta. Splash reserved pasta water as needed to create a glossy sauce.",\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Keep skillet off heat to prevent eggs from scrambling!"\n'
-    '    }\n'
-    '  ]\n'
-    "}\n\n"
-    "10. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
-    "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown:\n"
-    "{\n"
-    '  "id": "info_card_1",\n'
-    '  "component": "DefaultCard",\n'
-    '  "title": "Chef\'s Tip & Dietary Notes",\n'
-    '  "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and starchy water creates the silky texture.\\n- **Toast the pepper**: Toasted black pepper releases fragrant essential oils."\n'
-    "}\n\n"
-    "Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool with a valid payload matching the catalog schema."
+    "### A2UI v1.0 Culinary UI Rules:\n"
+    "- Every response renders as a new independent card in the chat timeline. ALWAYS start with `createSurface` using a fresh unique `surfaceId` (e.g. `recipe_list_1`, `recipe_detail_carbonara_1`, `guided_cooking_1`), and either embed `components` directly inside `createSurface` or follow with `updateComponents` using that exact same `surfaceId`. NEVER emit `updateComponents` or `updateDataModel` for a `surfaceId` created in an earlier turn.\n"
+    f"- Set \"catalogId\": \"{CULINARY_CATALOG_ID}\" in createSurface.\n"
+    "- Use UAX #31 identifiers for component IDs (letters, numbers, underscores only; NEVER use hyphens '-').\n"
+    "- Prefer the custom culinary components ('RecipeSummaryCard', 'RecipeDetailCard', 'GuidedCookingCard', 'DefaultCard') over generic BasicCatalog primitives whenever applicable.\n"
+    "- If rendering any standard 'Button', set action event 'view_recipe' or 'start_cooking' with '{\"recipe_name\": \"<exact recipe name>\"}' in context.\n"
+    "- Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool."
 )
 
 a2ui_instruction = A2uiInstruction(
@@ -178,7 +90,7 @@ a2ui_instruction = A2uiInstruction(
 
 a2ui_toolset = SendA2uiToClientToolset(
     a2ui_enabled=True,
-    a2ui_processor=processor,
+    a2ui_processor=create_turn_processor,
 )
 
 

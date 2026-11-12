@@ -1,0 +1,1317 @@
+
+<!doctype html>
+
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, minimum-scale=1.0, initial-scale=1.0, user-scalable=yes">
+  <meta name="theme-color" content="#4F7DC9">
+  <meta charset="UTF-8">
+  <title>Codelab: Interactive Recipe Experiences with ADK and A2UI</title>
+  <link rel="stylesheet" href="//fonts.googleapis.com/css?family=Source+Code+Pro:400|Roboto:400,300,400italic,500,700|Roboto+Mono">
+  <link rel="stylesheet" href="//fonts.googleapis.com/icon?family=Material+Icons">
+  <link rel="stylesheet" href="https://storage.googleapis.com/claat-public/codelab-elements.css">
+  <style>
+    .success {
+      color: #1e8e3e;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <google-codelab-analytics gaid="UA-49880327-14"></google-codelab-analytics>
+  <google-codelab codelab-gaid=""
+                  id="a2ui-recipe-codelab"
+                  title="Codelab: Interactive Recipe Experiences with ADK and A2UI"
+                  environment="web"
+                  feedback-link="https://github.com/shangyilim/a2uirecipe/issues">
+    
+      <google-codelab-step label="1. Overview" duration="2">
+        <p>Build an AI-powered culinary recipe dashboard using <strong>Agent Development Kit (ADK)</strong> and <strong>A2UI</strong>, rendering interactive recipe cards, dietary tags, and action buttons dynamically from structured JSON.</p>
+<p><strong>Author:</strong> Shang Yi</p>
+<p>Most AI assistants reply to cooking inquiries with long walls of plain text or bulleted lists. In this codelab, you will use <strong>A2UI</strong> (Agent-to-User Interface) to enable your agent to reply with a rich, interactive user interface instead.</p>
+<p>The agent describes recipe cards, ingredients, cooking stats, and buttons in declarative JSON using a catalog of standard components. The client renders them using its own native widgets—meaning new layouts and experiences do not require changes to frontend code.</p>
+<h2 is-upgraded>What you&#39;ll build</h2>
+<p>A <strong>Recipe Assistant</strong> built through four progressive stages:</p>
+<ol type="1">
+<li><strong>Stage 1: Grounded Plain Text Agent</strong> — Queries recipe data via <code>get_recipes</code> and returns plain text.</li>
+<li><strong>Stage 2: A2UI JSON Agent</strong> — Queries recipe data and outputs structured A2UI v1.0 JSON with components and data bindings.</li>
+<li><strong>Stage 3: Render Default A2UI Catalog on the Client</strong> — Renders standard A2UI v1.0 primitives (<code>Card</code>, <code>Column</code>, <code>Row</code>, <code>Text</code>, <code>Image</code>, <code>Button</code>) using <code>@a2ui/react</code> and <code>@a2ui/web_core</code> styled with CSS variables.</li>
+<li><strong>Stage 4: Author a Formal Custom A2UI Catalog</strong> — Upgrades both backend and frontend with a formal domain catalog (<code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, <code>DefaultCard</code>) using Pydantic, Zod schemas, and custom React components: <ul>
+<li><strong>Recipe Summary Cards</strong>: Discovery cards with authentic food photography, stats, badges, and action buttons.</li>
+<li><strong>Recipe Detail Cards</strong>: In-depth ingredients checklist and preparation guidance.</li>
+<li><strong>Single-Card Guided Stepper (</strong><strong><code>GuidedCookingCard</code></strong><strong>)</strong>: Bundles all steps for a recipe into a single card with zero-latency client-side Next/Previous navigation and interactive countdown timers for timed steps.</li>
+<li><strong>Markdown Notes (</strong><strong><code>DefaultCard</code></strong><strong>)</strong>: Formatted cooking tips and chef notes.</li>
+</ul>
+</li>
+</ol>
+<pre><code>+-------------------------------------------------------------+
+|                     User Asks:                              |
+|          &#34;What can I make for dinner tonight?&#34;              |
++-------------------------------------------------------------+
+                              │
+                              ▼
+                 +──────────────────────────+
+                 |  Gemini 3.5 Flash-Lite   |
+                 |      (google-adk)        |
+                 +──────────────────────────+
+                              │
+               Calls Tool: get_recipes() (Grounded)
+                              │
+                              ▼
+            +─────────────────────────────────────+
+            |  Stage 1: Plain text summary        |
+            |  Stage 2: Structured A2UI JSON      |
+            |  Stage 3: Default A2UI Catalog UI   |
+            |  Stage 4: Formal Custom Catalog UI  |
+            |   • RecipeSummaryCard (Discovery)   |
+            |   • RecipeDetailCard (Ingredients)  |
+            |   • GuidedCookingCard (Stepper)     |
+            |   • Live Timers &amp; Markdown Notes    |
+            +─────────────────────────────────────+
+</code></pre>
+<h2 class="checklist" is-upgraded>What you&#39;ll learn</h2>
+<ul class="checklist">
+<li>How A2UI works: the <strong>v1.0 specification</strong>, the flat component model, top-down root ordering, and lifecycle messages (<code>createSurface</code>, <code>updateComponents</code>, <code>updateDataModel</code>, <code>deleteSurface</code>).</li>
+<li>How to strictly ground an ADK agent with tools to prevent hallucinations of recipes, ingredients, or image URLs.</li>
+<li>How to use <strong><code>a2ui-agent-sdk</code></strong><strong> and </strong><strong><code>a2ui-adk</code></strong> (<code>A2uiRequestProcessor</code>, <code>A2uiInstruction</code>, and <code>SendA2uiToClientToolset</code>) for prompt generation, backend schema validation, and LLM self-correction.</li>
+<li>How to design custom A2UI components (<code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, <code>DefaultCard</code>).</li>
+<li>How to create a <strong>single-card step-by-step stepper</strong> with client-side navigation and interactive countdown timers.</li>
+<li>How to connect a React and Tailwind CSS client to the ADK agent via <code>@a2ui/react</code> and <code>@a2ui/web_core</code>.</li>
+</ul>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="2. Set up your environment" duration="5">
+        <h2 is-upgraded>Prerequisites</h2>
+<ul>
+<li>Python 3.12+ (or 3.13)</li>
+<li>A Gemini API Key from <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</li>
+</ul>
+<h2 is-upgraded>2.1 Clone the Codebase</h2>
+<p>Clone the repository and check out the starter <code>stage0</code> branch:</p>
+<pre><code language="language-bash" class="language-bash">git clone https://github.com/shangyilim/a2uirecipe.git
+cd a2uirecipe
+git checkout stage0
+</code></pre>
+<h2 is-upgraded>2.2 Project Directory Structure</h2>
+<p>In your project folder (<code>a2uirecipe</code>), the structure is organized as follows:</p>
+<pre><code language="language-text" class="language-text">a2uirecipe/
+├── services.py           # Root ADK custom services entry point (delegates to recipe_agent)
+├── recipe_agent/         # Recipe Assistant Agent package
+│   ├── .env              # Environment variables (API keys, RECIPE_STAGE)
+│   ├── .env.example      # Environment variable template
+│   ├── __init__.py       # Package initialization &amp; service hookup
+│   ├── recipes.py        # Curated recipe dataset and get_recipes tool
+│   ├── agent.py          # Unified agent definition (supports Stages 1, 2, and 3)
+│   ├── services.py       # Custom ADK FastAPI static mount for /images
+│   └── images/           # Generated food photography assets
+└── frontend/             # Modern React + Vite + Tailwind client
+    ├── src/
+    │   ├── components/
+    │   │   ├── RecipeSummaryCard.tsx   # Discovery summary cards
+    │   │   ├── RecipeDetailCard.tsx    # Detailed view with ingredients
+    │   │   ├── GuidedCookingCard.tsx   # Single-card stepper with timers
+    │   │   ├── DefaultCard.tsx         # Markdown formatted text &amp; tips
+    │   │   └── A2UIRenderer.tsx        # Dynamic A2UI surface renderer
+    │   ├── services/adkService.ts      # Direct ADK Web API client
+    │   └── App.tsx
+    └── package.json
+</code></pre>
+<h2 is-upgraded>2.3 Install Dependencies</h2>
+<p>Create and activate a virtual environment, then install ADK and the A2UI SDK:</p>
+<pre><code language="language-bash" class="language-bash">python3 -m venv .venv
+source .venv/bin/activate
+pip install google-adk a2ui-agent-sdk a2ui-adk
+</code></pre>
+<h2 is-upgraded>2.4 Configure API Credentials</h2>
+<ol type="1">
+<li>Copy the example environment configuration: <pre><code language="language-bash" class="language-bash">cp recipe_agent/.env.example recipe_agent/.env
+</code></pre>
+</li>
+<li><strong>Obtain your Gemini API Key</strong>: <ul>
+<li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio Get API Key</a>.</li>
+<li>Click <strong>Create API key</strong>.</li>
+<li>If prompted, select your active Google Cloud project so the key is associated with it.</li>
+<li>Copy the generated key.</li>
+</ul>
+</li>
+<li>Open <code>recipe_agent/.env</code> and set your API key: <pre><code language="language-bash" class="language-bash">GEMINI_API_KEY=your_actual_gemini_api_key_here
+RECIPE_STAGE=1
+</code></pre>
+</li>
+</ol>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="3. Define Recipe Mock Data &amp; Tool" duration="3">
+        <p>Create <code>recipe_agent/recipes.py</code> containing a curated list of dishes and a tool function <code>get_recipes()</code>. Each recipe includes preparation stats, ingredients, step-by-step instructions, dietary tags, and a relative image URL (<code>/images/...</code>) served locally by the agent&#39;s ADK static endpoint (which also works cleanly behind the React dev server proxy).</p>
+<pre><code language="language-python" class="language-python"># recipe_agent/recipes.py
+
+RECIPES = [
+    {
+        &#34;id&#34;: &#34;pasta-carbonara&#34;,
+        &#34;name&#34;: &#34;Classic Roman Carbonara&#34;,
+        &#34;cuisine&#34;: &#34;Italian&#34;,
+        &#34;category&#34;: &#34;Main Course&#34;,
+        &#34;prep_time&#34;: &#34;10 mins&#34;,
+        &#34;cook_time&#34;: &#34;15 mins&#34;,
+        &#34;servings&#34;: 2,
+        &#34;difficulty&#34;: &#34;Medium&#34;,
+        &#34;calories&#34;: &#34;580 kcal&#34;,
+        &#34;rating&#34;: 4.9,
+        &#34;description&#34;: &#34;Rich and silky traditional Roman pasta made with guanciale, fresh egg yolks, Pecorino Romano, and cracked black pepper.&#34;,
+        &#34;ingredients&#34;: [
+            &#34;200g Spaghetti or Rigatoni&#34;,
+            &#34;100g Guanciale (or Pancetta), diced&#34;,
+            &#34;3 large egg yolks + 1 whole egg&#34;,
+            &#34;50g Pecorino Romano, freshly grated&#34;,
+            &#34;Freshly cracked black pepper&#34;,
+            &#34;Sea salt (for pasta water)&#34;,
+        ],
+        &#34;instructions&#34;: [
+            &#34;Bring a large pot of salted water to a gentle boil and cook pasta until al dente.&#34;,
+            &#34;In a skillet, crisp the diced guanciale over medium heat until golden; remove from heat.&#34;,
+            &#34;Whisk egg yolks, whole egg, grated Pecorino, and abundant black pepper in a bowl.&#34;,
+            &#34;Toss hot pasta directly into the guanciale skillet with rendered fat.&#34;,
+            &#34;Stir in egg mixture quickly off heat with a splash of starchy pasta water to emulsify into a creamy sauce.&#34;,
+        ],
+        &#34;dietary&#34;: [&#34;Nut-Free&#34;],
+        &#34;badge&#34;: &#34;Chef&#39;s Choice&#34;,
+        &#34;image_url&#34;: &#34;/images/carbonara.jpg&#34;,
+    },
+    {
+        &#34;id&#34;: &#34;thai-basil-chicken&#34;,
+        &#34;name&#34;: &#34;Thai Basil Chicken (Pad Krapow)&#34;,
+        &#34;cuisine&#34;: &#34;Thai&#34;,
+        &#34;category&#34;: &#34;Quick Dinner&#34;,
+        &#34;prep_time&#34;: &#34;10 mins&#34;,
+        &#34;cook_time&#34;: &#34;8 mins&#34;,
+        &#34;servings&#34;: 2,
+        &#34;difficulty&#34;: &#34;Easy&#34;,
+        &#34;calories&#34;: &#34;420 kcal&#34;,
+        &#34;rating&#34;: 4.8,
+        &#34;description&#34;: &#34;Sizzling street-style minced chicken stir-fried with bird&#39;s eye chilies, fragrant garlic, and holy basil in a savory sauce.&#34;,
+        &#34;ingredients&#34;: [
+            &#34;300g Chicken breast or thighs, minced&#34;,
+            &#34;1 cup fresh Holy Basil leaves&#34;,
+            &#34;4 cloves garlic, minced&#34;,
+            &#34;3 Thai bird&#39;s eye chilies, sliced&#34;,
+            &#34;1 tbsp Oyster sauce&#34;,
+            &#34;1 tbsp Fish sauce&#34;,
+            &#34;1 tsp Dark soy sauce&#34;,
+            &#34;Crispy fried egg (for serving)&#34;,
+        ],
+        &#34;instructions&#34;: [
+            &#34;Pound chilies and garlic together; stir-fry in hot oil for 30 seconds until fragrant.&#34;,
+            &#34;Add minced chicken and cook over high heat until browned.&#34;,
+            &#34;Stir in savory sauces and a pinch of sugar.&#34;,
+            &#34;Fold in holy basil leaves until wilted and serve hot over jasmine rice.&#34;,
+        ],
+        &#34;dietary&#34;: [&#34;Dairy-Free&#34;, &#34;High-Protein&#34;],
+        &#34;badge&#34;: &#34;Fast &amp; Spicy&#34;,
+        &#34;image_url&#34;: &#34;/images/thai_basil_chicken.jpg&#34;,
+    },
+    {
+        &#34;id&#34;: &#34;mediterranean-quinoa-salad&#34;,
+        &#34;name&#34;: &#34;Mediterranean Quinoa Bowl&#34;,
+        &#34;cuisine&#34;: &#34;Mediterranean&#34;,
+        &#34;category&#34;: &#34;Salad / Healthy&#34;,
+        &#34;prep_time&#34;: &#34;15 mins&#34;,
+        &#34;cook_time&#34;: &#34;15 mins&#34;,
+        &#34;servings&#34;: 4,
+        &#34;difficulty&#34;: &#34;Easy&#34;,
+        &#34;calories&#34;: &#34;340 kcal&#34;,
+        &#34;rating&#34;: 4.7,
+        &#34;description&#34;: &#34;Refreshing salad with fluffy quinoa, crisp cucumbers, cherry tomatoes, Kalamata olives, feta, and lemon-herb vinaigrette.&#34;,
+        &#34;ingredients&#34;: [
+            &#34;1 cup dry Quinoa, cooked and cooled&#34;,
+            &#34;1 English cucumber, diced&#34;,
+            &#34;1.5 cups Cherry tomatoes, halved&#34;,
+            &#34;1/2 cup Kalamata olives, pitted and halved&#34;,
+            &#34;100g Feta cheese, crumbled&#34;,
+            &#34;Extra virgin olive oil and fresh lemon juice&#34;,
+        ],
+        &#34;instructions&#34;: [
+            &#34;Whisk olive oil, lemon juice, salt, and herbs.&#34;,
+            &#34;Toss cooled quinoa with diced vegetables and olives.&#34;,
+            &#34;Fold in crumbled feta and chill before serving.&#34;,
+        ],
+        &#34;dietary&#34;: [&#34;Vegetarian&#34;, &#34;Gluten-Free&#34;],
+        &#34;badge&#34;: &#34;Healthy &amp; Fresh&#34;,
+        &#34;image_url&#34;: &#34;/images/quinoa_bowl.jpg&#34;,
+    },
+]
+
+def get_recipes() -&gt; list[dict]:
+    &#34;&#34;&#34;Retrieve all curated recipes from the recipe catalog.&#34;&#34;&#34;
+    return RECIPES
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="4. Stage 1: Build the Plain Text Agent" duration="5">
+        <p>Create <code>recipe_agent/agent.py</code> with the following contents. In Stage 1, the agent operates like standard conversational chatbots. It calls <code>get_recipes</code> and outputs plain text markdown.</p>
+<pre><code language="language-python" class="language-python"># recipe_agent/agent.py
+
+from google.adk.agents import Agent
+from google.adk.models import Gemini
+from google.genai import types
+from .recipes import get_recipes
+
+root_agent = Agent(
+    model=Gemini(
+        model=&#34;gemini-3.5-flash-lite&#34;,
+        retry_options=types.HttpRetryOptions(attempts=5),
+    ),
+    name=&#34;recipe_assistant&#34;,
+    description=&#34;A culinary assistant that reports on recipe recommendations in plain text.&#34;,
+    instruction=(
+        &#34;You are a helpful culinary chef and recipe assistant. When users ask about &#34;
+        &#34;recipes, cooking ideas, or ingredients, use the get_recipes tool to retrieve &#34;
+        &#34;the available recipe data. Summarize the recipes clearly in plain text with &#34;
+        &#34;cooking times, ingredients, and step-by-step instructions.&#34;
+    ),
+    tools=[get_recipes],
+)
+</code></pre>
+<h2 is-upgraded>Testing Stage 1</h2>
+<p>Start the ADK web development server:</p>
+<pre><code language="language-bash" class="language-bash">.venv/bin/adk web --port 8080 --allow_origins &#34;*&#34; --reload_agents
+</code></pre>
+<ol type="1">
+<li>Open your browser to <code>http://127.0.0.1:8080</code>.</li>
+<li>From the top-left dropdown, select <strong><code>recipe_assistant</code></strong> (or <code>recipe_agent</code>).</li>
+<li>Send a prompt: <pre><code language="language-text" class="language-text">What can I make for dinner tonight?
+</code></pre>
+</li>
+<li><strong>Observation</strong>: The response is helpful, but it results in a lengthy text block that requires tedious scrolling and reading.</li>
+</ol>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="5. Stage 2: Generate Structured A2UI JSON (v1.0)" duration="5">
+        <aside class="special"><p><strong>Catch-up Checkpoint</strong>: If you want to jump straight to Stage 2 or need to reset your code from Stage 1, you can check out the <code>stage1</code> branch:</p>
+<pre><code language="language-bash" class="language-bash">git checkout stage1
+</code></pre>
+</aside>
+<p>Instead of generating unstructured text, we teach the LLM how to output <strong>validated A2UI v1.0 JSON</strong> via <code>a2ui.adk</code>.</p>
+<h2 is-upgraded>5.1 Use <code>a2ui.adk</code> (<code>A2uiInstruction</code>, <code>A2uiRequestProcessor</code> &amp; <code>SendA2uiToClientToolset</code>)</h2>
+<p>The A2UI framework provides an official ADK integration combining three pieces:</p>
+<ul>
+<li><strong><code>A2uiRequestProcessor</code></strong>: Binds the component catalog (<code>BasicCatalog(ProtocolVersion.V1_0)</code>) with an inference format factory (<code>DirectJsonFormatFactory()</code>) and compiles the formal v1.0 JSON schema and workflow rules.</li>
+<li><strong><code>A2uiInstruction</code></strong>: Acts as a dynamic, callable instruction provider for ADK. ADK parses <code>{variable}</code> syntax as session state templates; <code>A2uiInstruction</code> safely injects A2UI JSON schema templates and few-shot examples without triggering template parsing errors.</li>
+<li><strong><code>SendA2uiToClientToolset</code></strong>: Exposes the <code>send_a2ui_json_to_client</code> tool to Gemini. Rather than emitting fragile raw JSON inside chat text, the model submits its A2UI payload to this tool, which runs <code>validate_payload</code> on the Python backend: <ul>
+<li>If validation fails (e.g., hyphenated component IDs or legacy <code>usageHint</code> properties), it returns <code>{ "error": "..." }</code> so the model self-corrects automatically.</li>
+<li>Once valid, it sets <code>skip_summarization = True</code> and returns <code>{ "validated_a2ui_json": [...] }</code> as a clean <code>functionResponse</code>.</li>
+</ul>
+</li>
+</ul>
+<p>Replace the contents of <code>recipe_agent/agent.py</code> with the following:</p>
+<pre><code language="language-python" class="language-python"># recipe_agent/agent.py
+
+from google.adk.agents import Agent
+from google.adk.models import Gemini
+from google.genai import types
+from a2ui.adk import A2uiInstruction, SendA2uiToClientToolset
+from a2ui.core.basic_catalog import BasicCatalog
+from a2ui.core.schema import ProtocolVersion
+from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
+from a2ui.processor import A2uiRequestProcessor
+from .recipes import get_recipes
+
+# Initialize A2UI Request Processor with BasicCatalog v1.0
+processor = A2uiRequestProcessor(
+    [BasicCatalog(ProtocolVersion.V1_0)],
+    format_factory=DirectJsonFormatFactory(),
+)
+
+ROLE_DESCRIPTION = (
+    &#34;You are an expert culinary assistant and recipe dashboard. When users ask for &#34;
+    &#34;recipes, meal ideas, or cooking instructions, use the get_recipes tool to fetch &#34;
+    &#34;the current state.&#34;
+)
+
+UI_DESCRIPTION = &#34;&#34;&#34;
+- Every response renders as a new card in the chat timeline: ALWAYS start with &#39;createSurface&#39; using a fresh unique &#39;surfaceId&#39; (never emit &#39;updateComponents&#39; for a surface created in an earlier turn).
+- The first component in &#39;components&#39; MUST have id &#39;root&#39;.
+- Use flat v1.0 components where &#39;component&#39; is a string discriminator (e.g. &#39;Column&#39;, &#39;Text&#39;, &#39;Button&#39;).
+- Component IDs MUST be valid UAX #31 identifiers (letters, numbers, underscores only; NEVER hyphens &#39;-&#39;).
+- Set &#39;version&#39;: &#39;1.0&#39; in every message envelope.
+- Use &#39;children&#39; array with component IDs, &#39;justify&#39; instead of distribution, &#39;align&#39; instead of alignment, and &#39;variant&#39; instead of usageHint.
+- Deliver your A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool.
+&#34;&#34;&#34;
+
+# Dynamic A2UI instruction wrapper for ADK
+instruction = A2uiInstruction(
+    f&#34;{ROLE_DESCRIPTION}\n\n## UI Description:\n{UI_DESCRIPTION}&#34;,
+    a2ui_processor=processor,
+)
+
+# Validates outgoing A2UI JSON on the backend and auto-retries via LLM self-correction
+a2ui_toolset = SendA2uiToClientToolset(
+    a2ui_enabled=True,
+    a2ui_processor=processor,
+)
+
+root_agent = Agent(
+    model=Gemini(
+        model=&#34;gemini-3.5-flash-lite&#34;,
+        retry_options=types.HttpRetryOptions(attempts=5),
+    ),
+    name=&#34;recipe_assistant&#34;,
+    description=&#34;A culinary assistant that produces validated A2UI v1.0 JSON payloads.&#34;,
+    instruction=instruction,
+    tools=[get_recipes, a2ui_toolset],
+)
+</code></pre>
+<aside class="special"><p><strong>Why </strong><strong><code>SendA2uiToClientToolset</code></strong><strong>?</strong></p>
+<p><code>A2uiInstruction</code> teaches Gemini the schema via the system prompt, whereas <strong><code>SendA2uiToClientToolset</code></strong> gives the agent the <code>send_a2ui_json_to_client</code> tool. Every payload passes through <code>validate_payload</code> against <code>processor.active_catalogs</code> (checking UAX #31 identifiers, <code>Text.variant</code>, <code>Image.url</code>, and <code>Button.action</code>):</p>
+<ul>
+<li>If invalid, the tool returns <code>{ "error": "..." }</code> so the LLM automatically self-corrects before replying.</li>
+<li>If valid, the tool emits <code>{ "validated_a2ui_json": [...] }</code> in its <code>functionResponse</code>, eliminating client-side schema normalization hacks!</li>
+</ul>
+</aside>
+<h2 is-upgraded>Testing Stage 2</h2>
+<ol type="1">
+<li>In the ADK web UI, click <strong>+ New Session</strong> on <code>recipe_assistant</code>.</li>
+<li>Send the prompt: <pre><code language="language-text" class="language-text">What can I make for dinner tonight?
+</code></pre>
+</li>
+<li><strong>Observation</strong>: Because <code>SendA2uiToClientToolset</code> uses <code>skip_summarization = True</code>, Gemini calls <code>get_recipes</code> followed by <code>send_a2ui_json_to_client</code>. Click the <strong><code>send_a2ui_json_to_client</code></strong><strong> tool response chip</strong> (or open the <strong>Events</strong> tab) in ADK Web UI to inspect the returned <code>validated_a2ui_json</code> array containing <code>createSurface</code>, <code>updateComponents</code>, and <code>updateDataModel</code>—along with any automatic self-correction retries if validation failed on a first attempt.</li>
+</ol>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="6. Understanding the A2UI v1.0 Architecture &amp; Evolution" duration="4">
+        <p>Look closely at the JSON produced in Stage 2. The <strong>A2UI v1.0 Specification</strong> (<a href="https://a2ui.org/specification/v1.0-evolution-guide/" target="_blank">Evolution Guide</a>) standardizes agent-driven UI into an efficient, token-conscious architecture designed for production applications:</p>
+<h2 is-upgraded>1. <code>createSurface</code> (Single-Message &amp; Multi-Message Lifecycle)</h2>
+<p>Signals the client to create a rendering surface. In v1.0:</p>
+<ul>
+<li>The envelope version is standardized to <code>"version": "1.0"</code>.</li>
+<li>The <code>theme</code> property is deliberately left out as we want to render styling from the client natively.</li>
+<li>Surface creation supports <strong>single-message surface construction</strong>: <code>createSurface</code> can directly embed <code>components</code> and initial <code>dataModel</code> to eliminate round-trip latency.</li>
+</ul>
+<pre><code language="language-json" class="language-json">{
+  &#34;version&#34;: &#34;1.0&#34;,
+  &#34;createSurface&#34;: {
+    &#34;surfaceId&#34;: &#34;default&#34;,
+    &#34;catalogId&#34;: &#34;https://a2ui.org/specification/v1_0/basic_catalog.json&#34;
+  }
+}
+</code></pre>
+<p><strong>Root Rule in v1.0</strong>: The root container is explicitly declared by having exactly one component with <code>"id": "root"</code> placed first in <code>components</code>.</p>
+<h2 is-upgraded>2. <code>updateComponents</code> (Flat Discriminator Model)</h2>
+<p>Declares components using a clean <strong>flat discriminator model</strong> (<code>component: "<Type>"</code>) where attributes live directly on the component object rather than wrapped under nested keys:</p>
+<pre><code language="language-json" class="language-json">{
+  &#34;version&#34;: &#34;1.0&#34;,
+  &#34;updateComponents&#34;: {
+    &#34;surfaceId&#34;: &#34;default&#34;,
+    &#34;components&#34;: [
+      {
+        &#34;id&#34;: &#34;root&#34;,
+        &#34;component&#34;: &#34;Column&#34;,
+        &#34;children&#34;: [&#34;header-text&#34;, &#34;carbonara-card&#34;],
+        &#34;justify&#34;: &#34;start&#34;
+      },
+      {
+        &#34;id&#34;: &#34;header-text&#34;,
+        &#34;component&#34;: &#34;Text&#34;,
+        &#34;text&#34;: &#34;Recommended Dinner Recipes&#34;,
+        &#34;variant&#34;: &#34;h1&#34;
+      },
+      {
+        &#34;id&#34;: &#34;carbonara-card&#34;,
+        &#34;component&#34;: &#34;Card&#34;,
+        &#34;child&#34;: &#34;carbonara-body&#34;
+      },
+      {
+        &#34;id&#34;: &#34;carbonara-body&#34;,
+        &#34;component&#34;: &#34;Column&#34;,
+        &#34;children&#34;: [&#34;recipe-title&#34;, &#34;cook-button&#34;]
+      },
+      {
+        &#34;id&#34;: &#34;recipe-title&#34;,
+        &#34;component&#34;: &#34;Text&#34;,
+        &#34;text&#34;: &#34;Classic Roman Carbonara&#34;,
+        &#34;variant&#34;: &#34;h2&#34;
+      },
+      {
+        &#34;id&#34;: &#34;cook-button&#34;,
+        &#34;component&#34;: &#34;Button&#34;,
+        &#34;label&#34;: &#34;Start Cooking&#34;,
+        &#34;variant&#34;: &#34;primary&#34;,
+        &#34;action&#34;: {
+          &#34;@call&#34;: &#34;start_cooking&#34;,
+          &#34;args&#34;: { &#34;recipe_name&#34;: &#34;Classic Roman Carbonara&#34; }
+        }
+      }
+    ]
+  }
+}
+</code></pre>
+<h2 is-upgraded>3. <code>updateDataModel</code> &amp; <code>@path</code> Syntax</h2>
+<p>Data bindings and updates use natural JSON key-value maps:</p>
+<ul>
+<li>In A2UI v1.0, data-bound properties use the <code>@path</code> prefix (e.g. <code>{"@path": "/recipe_name"}</code>).</li>
+<li>Data model updates are applied with upsert semantics:</li>
+</ul>
+<pre><code language="language-json" class="language-json">{
+  &#34;version&#34;: &#34;1.0&#34;,
+  &#34;updateDataModel&#34;: {
+    &#34;surfaceId&#34;: &#34;default&#34;,
+    &#34;value&#34;: {
+      &#34;recipe_name&#34;: &#34;Classic Roman Carbonara&#34;,
+      &#34;cook_time&#34;: &#34;15 mins&#34;
+    }
+  }
+}
+</code></pre>
+<h2 is-upgraded>4. <code>deleteSurface</code> (Active Surface Scoping)</h2>
+<p>Surface IDs are scoped to <strong>currently active surfaces</strong>. When a surface is deleted via <code>deleteSurface</code>, its ID can be safely reused for future interactions:</p>
+<pre><code language="language-json" class="language-json">{
+  &#34;version&#34;: &#34;1.0&#34;,
+  &#34;deleteSurface&#34;: {
+    &#34;surfaceId&#34;: &#34;default&#34;
+  }
+}
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="7. Stage 3: Render Default A2UI Catalog on the Client" duration="8">
+        <aside class="special"><p><strong>Catch-up Checkpoint</strong>: If you want to jump straight to Stage 3 or need to reset your code from Stage 2, you can check out the <code>stage2</code> branch:</p>
+<pre><code language="language-bash" class="language-bash">git checkout stage2
+</code></pre>
+</aside>
+<p>In Stage 3, we configure the agent with the standard A2UI v1.0 <code>BasicCatalog</code> and render its output on the React client using the turnkey <code>@a2ui/react</code> default renderer (<code>DefaultA2UIRenderer.tsx</code>), styled with CSS custom properties. Once you&#39;ve seen the default primitives in action, we&#39;ll move to <strong>Stage 4</strong> to author a formal custom Culinary Catalog!</p>
+<h2 is-upgraded>7.1 Configure the Base A2UI v1.0 Agent (<code>recipe_agent/agent.py</code>)</h2>
+<p>To start with the <strong>Default Renderer (</strong></p>
+<p><strong><code>@a2ui/react</code></strong></p>
+<p><strong>)</strong>, configure <code>recipe_agent/agent.py</code> using the built-in <code>BasicCatalog(ProtocolVersion.V1_0)</code>. This instructs the agent to emit standard A2UI v1.0 primitives (<code>Column</code>, <code>Row</code>, <code>Card</code>, <code>Image</code>, <code>Text</code>, <code>Button</code>) with valid v1.0 <code>action.event</code> payloads:</p>
+<pre><code language="language-python" class="language-python"># recipe_agent/agent.py
+
+import os
+from google.adk.agents import Agent
+from google.adk.models import Gemini
+from google.genai import types
+from a2ui.adk import A2uiInstruction, SendA2uiToClientToolset
+from a2ui.core.basic_catalog import BasicCatalog
+from a2ui.core.schema import ProtocolVersion
+from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
+from a2ui.processor import A2uiRequestProcessor
+from a2ui.utils.renderer_state import RendererState
+from .recipes import get_recipes
+
+# ==============================================================================
+# Model Configuration
+# ==============================================================================
+gemini_model = Gemini(
+    model=&#34;gemini-3.5-flash-lite&#34;,
+    retry_options=types.HttpRetryOptions(attempts=5),
+)
+
+catalogs = [BasicCatalog(ProtocolVersion.V1_0)]
+
+processor = A2uiRequestProcessor(
+    catalogs,
+    format_factory=DirectJsonFormatFactory(),
+)
+
+
+def create_turn_processor(_ctx=None) -&gt; A2uiRequestProcessor:
+    return A2uiRequestProcessor(
+        catalogs,
+        format_factory=DirectJsonFormatFactory(),
+        state=RendererState(catalogs),
+    )
+
+ROLE_DESCRIPTION = (
+    &#34;You are an expert culinary assistant and interactive recipe dashboard. &#34;
+    &#34;CRITICAL: You do NOT have internal recipe knowledge. You MUST call the get_recipes tool &#34;
+    &#34;whenever the user asks for recipes, lists recipes, or asks for meal recommendations. &#34;
+    &#34;Never invent or hallucinate recipe data or image URLs. Only use the data from get_recipes.&#34;
+)
+
+WORKFLOW_DESCRIPTION = (
+    &#34;### Recipe Assistant Workflow:\n&#34;
+    &#34;1. RECIPE RETRIEVAL (MANDATORY):\n&#34;
+    &#34;When the user asks for recipes, all recipes, or meal ideas, ALWAYS call get_recipes first.\n\n&#34;
+    &#34;2. STAGE A - RECIPE LIST / DISCOVERY:\n&#34;
+    &#34;After receiving recipes from get_recipes, present each recipe inside a Card within a Column root container. &#34;
+    &#34;Include the recipe&#39;s title, description, cooking stats, authentic image_url from the tool, a &#39;View&#39; button, and a &#39;Let\&#39;s Cook This&#39; button.\n\n&#34;
+    &#34;3. STAGE B - RECIPE DETAILS:\n&#34;
+    &#34;When the user clicks &#39;View&#39; (or asks for full details/ingredients of a recipe), render the full recipe details with complete ingredients list and a &#39;Let\&#39;s Cook This&#39; button.\n\n&#34;
+    &#34;4. STAGE C - STEP-BY-STEP GUIDED COOKING:\n&#34;
+    &#34;When the user clicks &#39;Let\&#39;s Cook This&#39; or asks to cook/prepare a dish, render clear step-by-step instructions with timing and chef tips.&#34;
+)
+
+UI_DESCRIPTION = (
+    &#34;### A2UI v1.0 Component Specifications:\n&#34;
+    &#34;Construct rich A2UI v1.0 surfaces following these rules:\n&#34;
+    &#34;1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n&#34;
+    &#34;2. PER-TURN SURFACE CREATION: Every response renders as a new independent card in the chat timeline. ALWAYS start with `createSurface` using a fresh unique `surfaceId` (and never emit `updateComponents` for a surface from an earlier turn).\n&#34;
+    &#34;3. A2UI v1.0 ENVELOPE: Set \&#34;version\&#34;: \&#34;1.0\&#34; in each A2UI message.\n&#34;
+    &#34;3. TOP-DOWN ORDERING &amp; ROOT: The first element in &#39;components&#39; MUST be the root container with id &#39;root&#39;.\n&#34;
+    &#34;4. FLAT v1.0 COMPONENT MODEL &amp; UAX #31 IDENTIFIERS: Every component has &#39;id&#39;, &#39;component&#39;: &#39;&lt;Type&gt;&#39;, and its properties placed directly on the object. Component IDs MUST be valid UAX #31 identifiers (use letters, numbers, and underscores like &#39;header_text&#39;, &#39;recipe_card_1&#39;; NEVER use hyphens &#39;-&#39;).\n&#34;
+    &#34;5. BUTTON ACTIONS: Every &#39;Button&#39; component MUST have a valid v1.0 action with the exact recipe name in context:\n&#34;
+    &#34;   - View Button: \&#34;action\&#34;: {\&#34;event\&#34;: {\&#34;name\&#34;: \&#34;view_recipe\&#34;, \&#34;context\&#34;: {\&#34;recipe_name\&#34;: \&#34;&lt;exact recipe name&gt;\&#34;}}}\n&#34;
+    &#34;   - Cook Button: \&#34;action\&#34;: {\&#34;event\&#34;: {\&#34;name\&#34;: \&#34;start_cooking\&#34;, \&#34;context\&#34;: {\&#34;recipe_name\&#34;: \&#34;&lt;exact recipe name&gt;\&#34;}}}\n&#34;
+    &#34;   Always supply the exact recipe name from the tool in the context object.\n\n&#34;
+    &#34;6. Root Container Example:\n&#34;
+    &#34;{\n&#34;
+    &#39;  &#34;id&#34;: &#34;root&#34;,\n&#39;
+    &#39;  &#34;component&#34;: &#34;Column&#34;,\n&#39;
+    &#39;  &#34;children&#34;: [&#34;header_text&#34;, &#34;recipe_card_1&#34;, &#34;recipe_card_2&#34;],\n&#39;
+    &#39;  &#34;justify&#34;: &#34;start&#34;\n&#39;
+    &#34;}\n\n&#34;
+    &#34;Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool with a valid payload matching the catalog schema.&#34;
+)
+
+a2ui_instruction = A2uiInstruction(
+    (
+        f&#34;{ROLE_DESCRIPTION}\n\n&#34;
+        f&#34;{WORKFLOW_DESCRIPTION}\n\n&#34;
+        f&#34;## UI Description:\n{UI_DESCRIPTION}&#34;
+    ),
+    a2ui_processor=processor,
+)
+
+# Validates outgoing A2UI payloads against BasicCatalog + a fresh per-turn RendererState
+# so missing createSurface or schema violations trigger automatic LLM self-correction.
+a2ui_toolset = SendA2uiToClientToolset(
+    a2ui_enabled=True,
+    a2ui_processor=create_turn_processor,
+)
+
+root_agent = Agent(
+    model=gemini_model,
+    name=&#34;recipe_assistant&#34;,
+    description=&#34;A culinary assistant that renders rich A2UI recipe interfaces.&#34;,
+    instruction=a2ui_instruction,
+    tools=[get_recipes, a2ui_toolset],
+)
+</code></pre>
+<h2 is-upgraded>7.2 Use the Pre-Configured Default Renderer (<code>@a2ui/react</code> &amp; <code>@a2ui/web_core</code>)</h2>
+<p>To render standard A2UI v1.0 payloads on the client without writing custom component JSX, we use the official <strong><code>@a2ui/react</code></strong> and <strong><code>@a2ui/web_core</code></strong> packages from the <a href="https://github.com/a2ui-project/a2ui/tree/main/typescript/renderers/react" target="_blank">A2UI TypeScript renderers</a>. These packages parse incoming A2UI message streams (<code>createSurface</code>, <code>updateComponents</code>, <code>updateDataModel</code>) and automatically render standard <code>BasicCatalog</code> primitives (<code>Card</code>, <code>Column</code>, <code>Row</code>, <code>Text</code>, <code>Image</code>, <code>Button</code>, <code>Icon</code>).</p>
+<aside class="special"><p><strong>Already Pre-Installed &amp; Pre-Created!</strong></p>
+<p>Both <code>@a2ui/react</code> and <code>@a2ui/web_core</code> are <strong>already pre-configured</strong> in <code>frontend/package.json</code> (and will be installed automatically when you run <code>npm install</code> in <code>frontend/</code>). Additionally, <strong><code>frontend/src/components/DefaultA2UIRenderer.tsx</code></strong>—along with its theme variables and <code>App.tsx</code> wiring—is <strong>already created</strong> in your workspace so you can start testing right away.</p>
+</aside>
+<h3 is-upgraded>What to Examine (Optional)</h3>
+<p>If you want to understand how the client-side Default Renderer is put together, open and inspect these files in your editor:</p>
+<ol type="1">
+<li><strong><code>frontend/src/components/DefaultA2UIRenderer.tsx</code></strong>: <ul>
+<li><strong><code>MessageProcessor</code></strong><strong> (</strong><strong><code>@a2ui/web_core/v1_0</code></strong><strong>)</strong>: Instantiated with <code>[basicCatalog]</code> to ingest backend-validated Stage 3 <code>BasicCatalog</code> messages directly with zero client adapters or schema workarounds, and manage reactive surface state.</li>
+<li><strong><code>injectBasicCatalogStyles()</code></strong>: Injects the structural CSS required by <code>@a2ui/web_core</code> basic primitives.</li>
+<li><strong><code><A2uiSurface /></code></strong><strong> (</strong><strong><code>@a2ui/react</code></strong><strong>)</strong>: Mounts the reactive Web Component tree and subscribes to <code>surface.onAction</code> to forward button events (<code>view_recipe</code>, <code>start_cooking</code>) back to <code>handleAction</code> in <code>App.tsx</code>.</li>
+</ul>
+</li>
+<li><strong><code>frontend/src/index.css</code></strong>: <ul>
+<li>Per the <a href="https://a2ui.org/guides/theming" target="_blank">A2UI Theming &amp; Styling Guide</a>, defines <code>--a2ui-*</code> CSS Custom Properties scoped to <code>.a2ui-default-surface</code> (primary Emerald buttons, Slate typography, rounded cards, and spacing) so standard primitives match the application&#39;s theme.</li>
+</ul>
+</li>
+<li><strong><code>frontend/src/services/adkService.ts</code></strong><strong> &amp; </strong><strong><code>frontend/src/App.tsx</code></strong>: <ul>
+<li><code>adkService.ts</code> extracts <code>part.functionResponse.response.validated_a2ui_json</code> emitted by <code>SendA2uiToClientToolset</code> (with <code><a2ui-json></code> / raw JSON block fallback) and preserves <code>rawMessages</code> alongside <code>surfaceState</code>.</li>
+<li><code>App.tsx</code> provides a header toggle (<strong><code>Default (@a2ui/react)</code></strong> vs. <strong><code>Custom Catalog</code></strong>) and renders <code><DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} /></code> when Default mode is active.</li>
+</ul>
+</li>
+</ol>
+<h3 is-upgraded>Test the Default Renderer &amp; Understand Why to Switch to Custom UI Components</h3>
+<ol type="1">
+<li>Open two terminals to start the backend and frontend: <ul>
+<li><strong>Terminal 1 — Start the ADK Backend (port </strong><strong><code>8080</code></strong><strong>)</strong>: <pre><code language="language-bash" class="language-bash">source .venv/bin/activate
+.venv/bin/adk web --port 8080 --allow_origins &#34;*&#34; --reload_agents
+</code></pre>
+</li>
+<li><strong>Terminal 2 — Install &amp; Start the React Frontend (port </strong><strong><code>3000</code></strong><strong>)</strong>: <pre><code language="language-bash" class="language-bash">cd frontend
+npm install
+npm run dev
+</code></pre>
+</li>
+</ul>
+</li>
+<li>Open <code>http://localhost:3000</code> in your browser, select <strong><code>Default (@a2ui/react)</code></strong> in the header, and ask: <pre><code language="language-text" class="language-text">What can I make for dinner tonight?
+</code></pre>
+</li>
+<li>Notice how <code>@a2ui/react</code> renders standard <code>Card</code>, <code>Column</code>, <code>Row</code>, <code>Image</code>, <code>Text</code>, and <code>Button</code> components directly from your agent&#39;s <code>BasicCatalog</code> output—and clicking <strong>&#34;View&#34;</strong> or <strong>&#34;Let&#39;s Cook This&#34;</strong> triggers the next turn.</li>
+</ol>
+<p>While turnkey default rendering is ideal for generic interfaces (forms, settings panels, and informational cards), specialized culinary experiences benefit from custom domain components:</p>
+<ul>
+<li><strong>Culinary Discovery Cards</strong>: Rich photography headers, cooking time badges, calorie meters, and cuisine tags (<code>RecipeSummaryCard</code>).</li>
+<li><strong>Interactive Ingredient Checklists</strong>: Checkable portions and chef prep advice (<code>RecipeDetailCard</code>).</li>
+<li><strong>Single-Card Guided Cooking with Live Timers</strong>: A multi-step flow bundled into one card with zero-latency client-side <strong>Next</strong> / <strong>Previous</strong> navigation and interactive countdown timers (<code>GuidedCookingCard</code>, <code>CookingTimer</code>).</li>
+</ul>
+<p>Now that you have tested the default renderer in Stage 3, let&#39;s move to <strong>Stage 4</strong> to author a <strong>Formal Custom Culinary Catalog</strong>!</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="8. Stage 4: Author a Formal Custom A2UI Catalog" duration="10">
+        <aside class="special"><p><strong>Catch-up Checkpoint</strong>: If you want to jump straight to Stage 4 or need to reset your code from Stage 3, you can optionally check out the <code>stage3</code> branch:</p>
+<pre><code language="language-bash" class="language-bash">git checkout stage3
+</code></pre>
+</aside>
+<p>Following the <a href="https://a2ui.org/guides/authoring-components/#1-defining-the-catalog-schema" target="_blank">A2UI Authoring Components Guide</a>, we define a formal, contract-driven Custom Catalog across both backend (Pydantic) and frontend (Zod + <code>@a2ui/react</code>&#39;s <code>createComponentImplementation</code>).</p>
+<h2 is-upgraded>8.1 Define the Formal Backend Catalog (<code>recipe_agent/catalog.py</code>)</h2>
+<p>Create <code>recipe_agent/catalog.py</code> to define strict Pydantic v1.0 component schemas extending <code>BASIC_COMPONENTS</code> for <code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, and <code>DefaultCard</code>:</p>
+<pre><code language="language-python" class="language-python"># recipe_agent/catalog.py
+&#34;&#34;&#34;Formal A2UI v1.0 Catalog Definition for the Culinary Recipe Assistant.&#34;&#34;&#34;
+
+from __future__ import annotations
+
+from typing import List, Literal, Optional
+from pydantic import BaseModel, Field
+
+from a2ui.core.basic_catalog.v1_0 import BASIC_COMPONENTS, create_basic_catalog_functions
+from a2ui.core.catalog import Catalog, ModelComponentApi
+from a2ui.core.schema import ProtocolVersion
+from a2ui.core.schema.v1_0 import (
+    ComponentCommon,
+    DynamicBoolean,
+    DynamicNumber,
+    DynamicString,
+    DynamicStringList,
+)
+
+CULINARY_CATALOG_ID = (
+    &#34;https://a2ui.org/specification/v1_0/catalogs/culinary/catalog.json&#34;
+)
+
+
+class RecipeSummaryCardComponent(ComponentCommon):
+    &#34;&#34;&#34;Compact summary card displaying a recipe overview and action buttons.&#34;&#34;&#34;
+
+    component: Literal[&#34;RecipeSummaryCard&#34;] = &#34;RecipeSummaryCard&#34;
+    recipeId: Optional[str] = Field(
+        default=None, description=&#34;Unique identifier of the recipe.&#34;
+    )
+    name: DynamicString = Field(..., description=&#34;Display name of the recipe.&#34;)
+    description: Optional[DynamicString] = Field(
+        default=None, description=&#34;Short appetizing description of the dish.&#34;
+    )
+    cookTime: Optional[DynamicString] = Field(
+        default=None, description=&#34;Cooking duration (e.g. &#39;15 mins&#39;).&#34;
+    )
+    prepTime: Optional[DynamicString] = Field(
+        default=None, description=&#34;Preparation duration (e.g. &#39;10 mins&#39;).&#34;
+    )
+    difficulty: Optional[DynamicString] = Field(
+        default=None, description=&#34;Difficulty level (&#39;Easy&#39;, &#39;Medium&#39;, &#39;Hard&#39;).&#34;
+    )
+    calories: Optional[DynamicString] = Field(
+        default=None, description=&#34;Calorie count (e.g. &#39;580 kcal&#39;).&#34;
+    )
+    cuisine: Optional[DynamicString] = Field(
+        default=None, description=&#34;Cuisine category (e.g. &#39;Italian&#39;, &#39;Thai&#39;).&#34;
+    )
+    badge: Optional[DynamicString] = Field(
+        default=None, description=&#34;Highlight badge (e.g. \&#34;Chef&#39;s Choice\&#34;).&#34;
+    )
+    imageUrl: Optional[DynamicString] = Field(
+        default=None, description=&#34;Authentic image URL for the dish.&#34;
+    )
+
+
+class RecipeDetailCardComponent(ComponentCommon):
+    &#34;&#34;&#34;Full recipe detail card with ingredients list and guided cooking trigger.&#34;&#34;&#34;
+
+    component: Literal[&#34;RecipeDetailCard&#34;] = &#34;RecipeDetailCard&#34;
+    recipeId: Optional[str] = Field(
+        default=None, description=&#34;Unique identifier of the recipe.&#34;
+    )
+    name: DynamicString = Field(..., description=&#34;Display name of the recipe.&#34;)
+    description: Optional[DynamicString] = Field(
+        default=None, description=&#34;Full description of the dish.&#34;
+    )
+    prepTime: Optional[DynamicString] = Field(
+        default=None, description=&#34;Preparation duration.&#34;
+    )
+    cookTime: Optional[DynamicString] = Field(
+        default=None, description=&#34;Cooking duration.&#34;
+    )
+    servings: Optional[DynamicNumber] = Field(
+        default=None, description=&#34;Number of servings.&#34;
+    )
+    difficulty: Optional[DynamicString] = Field(
+        default=None, description=&#34;Difficulty level.&#34;
+    )
+    calories: Optional[DynamicString] = Field(
+        default=None, description=&#34;Calorie count per serving.&#34;
+    )
+    cuisine: Optional[DynamicString] = Field(
+        default=None, description=&#34;Cuisine category.&#34;
+    )
+    badge: Optional[DynamicString] = Field(
+        default=None, description=&#34;Highlight badge.&#34;
+    )
+    imageUrl: Optional[DynamicString] = Field(
+        default=None, description=&#34;Authentic image URL for the dish.&#34;
+    )
+    ingredients: Optional[DynamicStringList] = Field(
+        default=None, description=&#34;Complete list of recipe ingredients.&#34;
+    )
+    showCookButton: Optional[DynamicBoolean] = Field(
+        default=True, description=&#34;Whether to show the Let&#39;s Cook This button.&#34;
+    )
+
+
+class GuidedStep(BaseModel):
+    &#34;&#34;&#34;A single step in a GuidedCookingCard.&#34;&#34;&#34;
+
+    step: int = Field(..., description=&#34;1-based step index.&#34;)
+    title: str = Field(..., description=&#34;Short step heading.&#34;)
+    instruction: str = Field(..., description=&#34;Detailed instruction for this step.&#34;)
+    duration: Optional[str] = Field(
+        default=None, description=&#34;Human-readable duration (e.g. &#39;10 mins&#39;).&#34;
+    )
+    timerMinutes: Optional[int] = Field(
+        default=None,
+        description=&#34;Optional countdown timer in minutes when timing is required.&#34;,
+    )
+    dish: Optional[str] = Field(default=None, description=&#34;Name of the dish.&#34;)
+    tip: Optional[str] = Field(
+        default=None, description=&#34;Optional chef tip for this step.&#34;
+    )
+
+
+class GuidedCookingCardComponent(ComponentCommon):
+    &#34;&#34;&#34;Interactive multi-step cooking guide with local navigation and step timers.&#34;&#34;&#34;
+
+    component: Literal[&#34;GuidedCookingCard&#34;] = &#34;GuidedCookingCard&#34;
+    dish: DynamicString = Field(..., description=&#34;Name of the dish being cooked.&#34;)
+    steps: List[GuidedStep] = Field(
+        ..., description=&#34;Ordered list of all cooking steps for this recipe.&#34;
+    )
+
+
+class DefaultCardComponent(ComponentCommon):
+    &#34;&#34;&#34;General informational card supporting rich Markdown text.&#34;&#34;&#34;
+
+    component: Literal[&#34;DefaultCard&#34;] = &#34;DefaultCard&#34;
+    title: Optional[DynamicString] = Field(
+        default=None, description=&#34;Optional card title.&#34;
+    )
+    text: DynamicString = Field(
+        ..., description=&#34;Markdown-formatted body text.&#34;
+    )
+
+
+CULINARY_COMPONENTS = [
+    ModelComponentApi(RecipeSummaryCardComponent),
+    ModelComponentApi(RecipeDetailCardComponent),
+    ModelComponentApi(GuidedCookingCardComponent),
+    ModelComponentApi(DefaultCardComponent),
+]
+
+
+def create_culinary_catalog(locale: str | None = None) -&gt; Catalog:
+    &#34;&#34;&#34;Builds the formal Culinary Catalog extending the A2UI v1.0 Basic Catalog.&#34;&#34;&#34;
+    return Catalog(
+        catalog_id=CULINARY_CATALOG_ID,
+        protocol_version=ProtocolVersion.V1_0,
+        components=list(BASIC_COMPONENTS) + CULINARY_COMPONENTS,
+        functions=create_basic_catalog_functions(locale=locale),
+        schema_dialect=&#34;https://json-schema.org/draft/2020-12/schema&#34;,
+        schema_id=CULINARY_CATALOG_ID,
+        title=&#34;Culinary Recipe Assistant Catalog&#34;,
+        description=(
+            &#34;Formal A2UI v1.0 catalog combining standard layout primitives with &#34;
+            &#34;custom culinary components (RecipeSummaryCard, RecipeDetailCard, &#34;
+            &#34;GuidedCookingCard, DefaultCard).&#34;
+        ),
+        declared_protocol_version=&#34;1.0&#34;,
+        union_defs={&#34;anyComponent&#34;: None, &#34;anyFunction&#34;: None},
+    )
+</code></pre>
+<h2 is-upgraded>8.2 Register the Custom Catalog in <code>recipe_agent/agent.py</code></h2>
+<p>Update <code>recipe_agent/agent.py</code> to pass <code>create_culinary_catalog()</code> into <code>A2uiRequestProcessor</code> and <code>SendA2uiToClientToolset</code>, and instruct the agent on the three-stage custom component workflow:</p>
+<pre><code language="language-python" class="language-python"># recipe_agent/agent.py
+
+import os
+from google.adk.agents import Agent
+from google.genai import types
+from google.adk.models import Gemini
+from a2ui.adk import A2uiInstruction, SendA2uiToClientToolset
+from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
+from a2ui.processor import A2uiRequestProcessor
+from a2ui.utils.renderer_state import RendererState
+from .catalog import CULINARY_CATALOG_ID, create_culinary_catalog
+from .recipes import get_recipes
+
+# ==============================================================================
+# Model Configuration
+# ==============================================================================
+gemini_model = Gemini(
+    model=&#34;gemini-3.5-flash-lite&#34;,
+    retry_options=types.HttpRetryOptions(attempts=5),
+)
+
+catalogs = [create_culinary_catalog()]
+
+processor = A2uiRequestProcessor(
+    catalogs,
+    format_factory=DirectJsonFormatFactory(),
+)
+
+
+def create_turn_processor(_ctx=None) -&gt; A2uiRequestProcessor:
+    return A2uiRequestProcessor(
+        catalogs,
+        format_factory=DirectJsonFormatFactory(),
+        state=RendererState(catalogs),
+    )
+
+ROLE_DESCRIPTION = (
+    &#34;You are an expert culinary assistant and interactive recipe dashboard. &#34;
+    &#34;CRITICAL: You do NOT have internal recipe knowledge. You MUST call the get_recipes tool &#34;
+    &#34;whenever the user asks for recipes, lists recipes, or asks for meal recommendations. &#34;
+    &#34;Never invent or hallucinate recipe data or image URLs. Only use the data from get_recipes.&#34;
+)
+
+WORKFLOW_DESCRIPTION = (
+    &#34;### Recipe Assistant Workflow:\n&#34;
+    &#34;1. RECIPE RETRIEVAL (MANDATORY):\n&#34;
+    &#34;When the user asks for recipes, all recipes, or meal ideas, ALWAYS call get_recipes first.\n\n&#34;
+    &#34;2. STAGE A - RECIPE LIST / DISCOVERY:\n&#34;
+    &#34;After receiving recipes from get_recipes, present them using &#39;RecipeSummaryCard&#39; components inside a Column root container. &#34;
+    &#34;Each card features the recipe&#39;s title, cooking stats, badge, authentic image_url from the tool, a &#39;View&#39; button, and a &#39;Let\&#39;s Cook This&#39; button.\n\n&#34;
+    &#34;3. STAGE B - RECIPE DETAILS:\n&#34;
+    &#34;When the user clicks &#39;View&#39; (or asks for full details/ingredients of a recipe), render the full &#39;RecipeDetailCard&#39; with complete ingredients list. &#34;
+    &#34;The RecipeDetailCard includes the &#39;Let\&#39;s Cook This&#39; button so the user can start step-by-step guided cooking.\n\n&#34;
+    &#34;4. STAGE C - STEP-BY-STEP GUIDED COOKING (ALL STEPS IN 1 SINGLE CARD):\n&#34;
+    &#34;When the user clicks &#39;Let\&#39;s Cook This&#39; or asks to cook/prepare a dish:\n&#34;
+    &#34;- Return ALL instruction steps in a single &#39;GuidedCookingCard&#39;. The card lets the user navigate forward and backward locally via Next and Previous buttons without calling the agent again!\n&#34;
+    &#34;- In the &#39;steps&#39; array, include each step&#39;s title, instruction, and optional tip.\n&#34;
+    &#34;- For instructions that have TIME information (boiling, searing, simmering, sautéing, baking, chilling, resting): specify &#39;timerMinutes&#39; (number of minutes) and &#39;duration&#39; (e.g. &#39;10 mins&#39;, &#39;5 mins&#39;) so an interactive countdown timer appears directly on that step!\n&#34;
+    &#34;- For GENERAL instructions (prep, whisking, chopping, tossing, seasoning, plating): omit timerMinutes so it displays a clean, focused instruction card.&#34;
+)
+
+UI_DESCRIPTION = (
+    &#34;### A2UI v1.0 Culinary UI Rules:\n&#34;
+    &#34;- Every response renders as a new independent card in the chat timeline. ALWAYS start with `createSurface` using a fresh unique `surfaceId` (e.g. `recipe_list_1`, `recipe_detail_carbonara_1`, `guided_cooking_1`), and either embed `components` directly inside `createSurface` or follow with `updateComponents` using that exact same `surfaceId`. NEVER emit `updateComponents` or `updateDataModel` for a `surfaceId` created in an earlier turn.\n&#34;
+    f&#34;- Set \&#34;catalogId\&#34;: \&#34;{CULINARY_CATALOG_ID}\&#34; in createSurface.\n&#34;
+    &#34;- Use UAX #31 identifiers for component IDs (letters, numbers, underscores only; NEVER use hyphens &#39;-&#39;).\n&#34;
+    &#34;- Prefer the custom culinary components (&#39;RecipeSummaryCard&#39;, &#39;RecipeDetailCard&#39;, &#39;GuidedCookingCard&#39;, &#39;DefaultCard&#39;) over generic BasicCatalog primitives whenever applicable.\n&#34;
+    &#34;- If rendering any standard &#39;Button&#39;, set action event &#39;view_recipe&#39; or &#39;start_cooking&#39; with &#39;{\&#34;recipe_name\&#34;: \&#34;&lt;exact recipe name&gt;\&#34;}&#39; in context.\n&#34;
+    &#34;- Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool.&#34;
+)
+
+a2ui_instruction = A2uiInstruction(
+    (
+        f&#34;{ROLE_DESCRIPTION}\n\n&#34;
+        f&#34;{WORKFLOW_DESCRIPTION}\n\n&#34;
+        f&#34;## UI Description:\n{UI_DESCRIPTION}&#34;
+    ),
+    a2ui_processor=processor,
+)
+
+a2ui_toolset = SendA2uiToClientToolset(
+    a2ui_enabled=True,
+    a2ui_processor=create_turn_processor,
+)
+
+root_agent = Agent(
+    model=gemini_model,
+    name=&#34;recipe_assistant&#34;,
+    description=&#34;A culinary assistant that renders rich A2UI recipe interfaces.&#34;,
+    instruction=a2ui_instruction,
+    tools=[get_recipes, a2ui_toolset],
+)
+</code></pre>
+<h2 is-upgraded>8.3 Create the Frontend Zod Catalog (<code>frontend/src/catalog/culinaryCatalog.tsx</code>)</h2>
+<p>Create <code>frontend/src/catalog/culinaryCatalog.tsx</code>:</p>
+<pre><code language="language-tsx" class="language-tsx">// frontend/src/catalog/culinaryCatalog.tsx
+import { z } from &#39;zod&#39;;
+import {
+  basicCatalog,
+  DynamicBooleanSchema,
+  DynamicNumberSchema,
+  DynamicStringListSchema,
+  DynamicStringSchema,
+} from &#39;@a2ui/web_core/v1_0&#39;;
+import { createComponentImplementation } from &#39;@a2ui/react&#39;;
+import { RecipeSummaryCard } from &#39;../components/RecipeSummaryCard&#39;;
+import { RecipeDetailCard } from &#39;../components/RecipeDetailCard&#39;;
+import { GuidedCookingCard } from &#39;../components/GuidedCookingCard&#39;;
+import { DefaultCard } from &#39;../components/DefaultCard&#39;;
+
+export const CULINARY_CATALOG_ID =
+  &#39;https://a2ui.org/specification/v1_0/catalogs/culinary/catalog.json&#39;;
+
+const normalizeImageUrl = (url?: string): string =&gt; {
+  if (!url) return &#39;&#39;;
+  return String(url).replace(/^http:\/\/(?:127\.0\.0\.1|localhost):8080/, &#39;&#39;);
+};
+
+// 1. Formal Zod Catalog Schemas (Matching recipe_agent/catalog.py)
+export const RecipeSummaryCardApi = {
+  name: &#39;RecipeSummaryCard&#39;,
+  schema: z.object({
+    recipeId: z.string().optional(),
+    name: DynamicStringSchema,
+    description: DynamicStringSchema.optional(),
+    cookTime: DynamicStringSchema.optional(),
+    prepTime: DynamicStringSchema.optional(),
+    difficulty: DynamicStringSchema.optional(),
+    calories: DynamicStringSchema.optional(),
+    cuisine: DynamicStringSchema.optional(),
+    badge: DynamicStringSchema.optional(),
+    imageUrl: DynamicStringSchema.optional(),
+  }),
+};
+
+export const RecipeDetailCardApi = {
+  name: &#39;RecipeDetailCard&#39;,
+  schema: z.object({
+    recipeId: z.string().optional(),
+    name: DynamicStringSchema,
+    description: DynamicStringSchema.optional(),
+    prepTime: DynamicStringSchema.optional(),
+    cookTime: DynamicStringSchema.optional(),
+    servings: z.union([DynamicNumberSchema, z.string()]).optional(),
+    difficulty: DynamicStringSchema.optional(),
+    calories: DynamicStringSchema.optional(),
+    cuisine: DynamicStringSchema.optional(),
+    badge: DynamicStringSchema.optional(),
+    imageUrl: DynamicStringSchema.optional(),
+    ingredients: z.union([DynamicStringListSchema, z.array(z.string())]).optional(),
+    showCookButton: DynamicBooleanSchema.optional(),
+  }),
+};
+
+export const GuidedStepSchema = z.object({
+  step: z.union([z.number(), z.string()]).optional(),
+  title: z.string().optional(),
+  instruction: z.string(),
+  duration: z.string().optional(),
+  timerMinutes: z.union([z.number(), z.string()]).optional(),
+  dish: z.string().optional(),
+  tip: z.string().optional(),
+});
+
+export const GuidedCookingCardApi = {
+  name: &#39;GuidedCookingCard&#39;,
+  schema: z.object({
+    dish: DynamicStringSchema,
+    steps: z.array(GuidedStepSchema),
+  }),
+};
+
+export const DefaultCardApi = {
+  name: &#39;DefaultCard&#39;,
+  schema: z.object({
+    title: DynamicStringSchema.optional(),
+    text: DynamicStringSchema,
+  }),
+};
+
+// 2. Register React Custom Components via createComponentImplementation
+const RecipeSummaryCardImpl = createComponentImplementation(
+  RecipeSummaryCardApi as any,
+  ({ props, context }: any) =&gt; (
+    &lt;RecipeSummaryCard
+      id={props.recipeId || context.componentModel.id}
+      name={String(props.name || &#39;&#39;)}
+      description={props.description ? String(props.description) : undefined}
+      cookTime={props.cookTime ? String(props.cookTime) : undefined}
+      prepTime={props.prepTime ? String(props.prepTime) : undefined}
+      difficulty={props.difficulty ? String(props.difficulty) : undefined}
+      calories={props.calories ? String(props.calories) : undefined}
+      cuisine={props.cuisine ? String(props.cuisine) : undefined}
+      badge={props.badge ? String(props.badge) : undefined}
+      imageUrl={normalizeImageUrl(props.imageUrl)}
+      onAction={(action) =&gt; {
+        context.dispatchAction({
+          event: { name: action.type, context: action.parameters || {} },
+        });
+      }}
+    /&gt;
+  )
+);
+
+const RecipeDetailCardImpl = createComponentImplementation(
+  RecipeDetailCardApi as any,
+  ({ props, context }: any) =&gt; (
+    &lt;RecipeDetailCard
+      id={props.recipeId || context.componentModel.id}
+      name={String(props.name || &#39;&#39;)}
+      description={props.description ? String(props.description) : undefined}
+      prepTime={props.prepTime ? String(props.prepTime) : undefined}
+      cookTime={props.cookTime ? String(props.cookTime) : undefined}
+      servings={props.servings}
+      difficulty={props.difficulty ? String(props.difficulty) : undefined}
+      calories={props.calories ? String(props.calories) : undefined}
+      cuisine={props.cuisine ? String(props.cuisine) : undefined}
+      badge={props.badge ? String(props.badge) : undefined}
+      imageUrl={normalizeImageUrl(props.imageUrl)}
+      ingredients={Array.isArray(props.ingredients) ? props.ingredients.map(String) : []}
+      showCookButton={props.showCookButton ?? true}
+      onAction={(action) =&gt; {
+        context.dispatchAction({
+          event: { name: action.type, context: action.parameters || {} },
+        });
+      }}
+    /&gt;
+  )
+);
+
+const GuidedCookingCardImpl = createComponentImplementation(
+  GuidedCookingCardApi as any,
+  ({ props, context }: any) =&gt; (
+    &lt;GuidedCookingCard
+      dish={String(props.dish || &#39;&#39;)}
+      steps={Array.isArray(props.steps) ? props.steps : []}
+      onAction={(action) =&gt; {
+        context.dispatchAction({
+          event: { name: action.type, context: action.parameters || {} },
+        });
+      }}
+    /&gt;
+  )
+);
+
+const DefaultCardImpl = createComponentImplementation(
+  DefaultCardApi as any,
+  ({ props }: any) =&gt; (
+    &lt;DefaultCard
+      title={props.title ? String(props.title) : undefined}
+      text={String(props.text || &#39;&#39;)}
+    /&gt;
+  )
+);
+
+// 3. Derived Formal Culinary Catalog
+export const culinaryCatalog = basicCatalog.derive({
+  catalogId: CULINARY_CATALOG_ID,
+  components: [
+    ...basicCatalog.components.values(),
+    RecipeSummaryCardImpl as any,
+    RecipeDetailCardImpl as any,
+    GuidedCookingCardImpl as any,
+    DefaultCardImpl as any,
+  ],
+  instructions:
+    &#39;Formal Culinary Recipe Catalog extending A2UI Basic Catalog with RecipeSummaryCard, RecipeDetailCard, GuidedCookingCard, and DefaultCard.&#39;,
+});
+</code></pre>
+<h2 is-upgraded>8.4 Implement Custom UI Components in <code>frontend/src/components/A2UIRenderer.tsx</code></h2>
+<p>Now we update <code>frontend/src/components/A2UIRenderer.tsx</code> to validate and render surfaces strictly via <code>MessageProcessor([culinaryCatalog])</code> and <code><A2uiSurface /></code>, showing a clear error banner if the agent returns <code>BasicCatalog</code> (or fails schema validation) instead of falling back:</p>
+<pre><code language="language-tsx" class="language-tsx">// frontend/src/components/A2UIRenderer.tsx
+
+import { useState, useEffect, type FC } from &#39;react&#39;;
+import { MessageProcessor, basicCatalog, injectBasicCatalogStyles } from &#39;@a2ui/web_core/v1_0&#39;;
+import { A2uiSurface } from &#39;@a2ui/react&#39;;
+import { culinaryCatalog, CULINARY_CATALOG_ID } from &#39;../catalog/culinaryCatalog&#39;;
+import { AlertCircle } from &#39;lucide-react&#39;;
+
+if (typeof document !== &#39;undefined&#39;) {
+  injectBasicCatalogStyles();
+}
+
+interface Props {
+  messages?: any[];
+  onAction?: (action: { type: string; parameters?: Record&lt;string, any&gt;; context?: Record&lt;string, any&gt; }) =&gt; void;
+}
+
+export const A2UIRenderer: FC&lt;Props&gt; = ({ messages, onAction }) =&gt; {
+  const [catalogSurfaces, setCatalogSurfaces] = useState&lt;any[]&gt;([]);
+  const [catalogError, setCatalogError] = useState&lt;string | null&gt;(null);
+
+  useEffect(() =&gt; {
+    if (!messages || messages.length === 0) {
+      setCatalogSurfaces([]);
+      setCatalogError(null);
+      return;
+    }
+
+    const returnedBasicCatalog = messages.some(
+      (msg) =&gt; msg?.createSurface?.catalogId === basicCatalog.id
+    );
+    if (returnedBasicCatalog) {
+      setCatalogSurfaces([]);
+      setCatalogError(
+        `Custom Catalog mode expected ${CULINARY_CATALOG_ID}, but the agent returned BasicCatalog (${basicCatalog.id}). Switch the header toggle to &#34;Default (@a2ui/react)&#34; or enable CulinaryCatalog on the agent.`
+      );
+      return;
+    }
+
+    const processor = new MessageProcessor([culinaryCatalog]);
+    const actionSubs: Array&lt;{ unsubscribe: () =&gt; void }&gt; = [];
+
+    const sync = () =&gt; {
+      const activeSurfaces = Array.from(processor.model.surfacesMap.values());
+      setCatalogSurfaces(activeSurfaces);
+
+      actionSubs.forEach((sub) =&gt; sub.unsubscribe());
+      actionSubs.length = 0;
+
+      for (const surf of activeSurfaces) {
+        const sub = (surf as any).onAction.subscribe((actionEvent: any) =&gt; {
+          const actionName = actionEvent.name || actionEvent.type || &#39;action&#39;;
+          const params = actionEvent.context || actionEvent.parameters || {};
+          onAction?.({
+            type: actionName,
+            parameters: params,
+            context: params,
+          });
+        });
+        actionSubs.push(sub);
+      }
+    };
+
+    const createdSub = processor.onSurfaceCreated(sync);
+    const deletedSub = processor.onSurfaceDeleted(sync);
+
+    try {
+      processor.processMessages(messages);
+      sync();
+      if (processor.model.surfacesMap.size === 0) {
+        setCatalogError(
+          `Custom Catalog renderer could not create a surface for ${CULINARY_CATALOG_ID}.`
+        );
+      } else {
+        setCatalogError(null);
+      }
+    } catch (err) {
+      console.warn(&#39;Formal Culinary Catalog processor error:&#39;, err);
+      setCatalogSurfaces([]);
+      setCatalogError(
+        err instanceof Error
+          ? err.message
+          : `Failed to validate payload against Custom Catalog (${CULINARY_CATALOG_ID}).`
+      );
+    }
+
+    return () =&gt; {
+      createdSub.unsubscribe();
+      deletedSub.unsubscribe();
+      actionSubs.forEach((sub) =&gt; sub.unsubscribe());
+    };
+  }, [messages, onAction]);
+
+  if (catalogError) {
+    return (
+      &lt;div
+        role=&#34;alert&#34;
+        className=&#34;flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-900&#34;
+      &gt;
+        &lt;AlertCircle size={16} className=&#34;shrink-0 mt-0.5 text-red-600&#34; /&gt;
+        &lt;div className=&#34;space-y-1&#34;&gt;
+          &lt;p className=&#34;font-semibold&#34;&gt;Catalog Mismatch Error&lt;/p&gt;
+          &lt;p className=&#34;leading-relaxed text-red-800&#34;&gt;{catalogError}&lt;/p&gt;
+        &lt;/div&gt;
+      &lt;/div&gt;
+    );
+  }
+
+  if (catalogSurfaces.length === 0) {
+    return null;
+  }
+
+  return (
+    &lt;div className=&#34;a2ui-surface w-full space-y-4&#34;&gt;
+      {catalogSurfaces.map((surf) =&gt; (
+        &lt;A2uiSurface key={surf.id} surface={surf as any} /&gt;
+      ))}
+    &lt;/div&gt;
+  );
+};
+</code></pre>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="9. Test the Three-Stage Culinary Flow" duration="5">
+        <p>With the agent configured, test the complete end-to-end culinary journey:</p>
+<h2 is-upgraded>Step 1: Recipe Discovery (Stage A)</h2>
+<p><strong>Prompt</strong>:</p>
+<pre><code language="language-text" class="language-text">What can I make for dinner tonight?
+</code></pre>
+<p><strong>Result</strong>: The agent calls <code>get_recipes</code> and returns interactive <code>RecipeSummaryCard</code>s. Each card features:</p>
+<ul>
+<li>Authentic food photography (<code>/images/carbonara.jpg</code>).</li>
+<li>Cooking duration and calorie tags.</li>
+<li>Difficulty and category badges.</li>
+<li><strong>&#34;View&#34;</strong> button and <strong>&#34;Let&#39;s Cook This&#34;</strong> button.</li>
+</ul>
+<h2 is-upgraded>Step 2: Full Ingredients Inspection (Stage B)</h2>
+<p><strong>Action</strong>: Click the <strong>&#34;View&#34;</strong> button on the <em>Classic Roman Carbonara</em> card. <strong>Result</strong>: The agent outputs a <code>RecipeDetailCard</code> displaying:</p>
+<ul>
+<li>Complete bulleted ingredient checklist with exact portions (e.g., 200g Spaghetti, 100g Guanciale, 3 egg yolks).</li>
+<li>Servings, cook time, and nutritional stats.</li>
+<li>Prominent <strong>&#34;Let&#39;s Cook This&#34;</strong> button.</li>
+</ul>
+<h2 is-upgraded>Step 3: Single-Card Guided Cooking (Stage C)</h2>
+<p><strong>Action</strong>: Click the <strong>&#34;Let&#39;s Cook This&#34;</strong> button. <strong>Result</strong>: The agent emits a single, self-contained <code>GuidedCookingCard</code>:</p>
+<ul>
+<li><strong>Single Unified Card</strong>: All 5 steps are bundled into one card container with a progress bar and numbered step pills (<code>[1]</code>, <code>[2]</code>, <code>[3]</code>, etc.).</li>
+<li><strong>One Step at a Time</strong>: Only the current active step is visible, keeping the workspace focused and clutter-free.</li>
+<li><strong>Local Client-Side Navigation</strong>: Clicking <strong>&#34;Next Step&#34;</strong> or <strong>&#34;Previous&#34;</strong> immediately advances or rewinds the step locally in React with <strong>zero server delay</strong> and <strong>no additional agent turns</strong>.</li>
+<li><strong>Interactive Timers</strong>: Step 1 (10 mins boiling pasta) and Step 2 (5 mins crisping guanciale) display built-in digital countdown timers with <strong>Start</strong>, <strong>Pause</strong>, <strong>Reset</strong>, and bell chimes directly inside the card!</li>
+<li><strong>Culinary Tips</strong>: Chef&#39;s advice (e.g. <em>&#34;Save 1/2 cup of starchy pasta water before draining!&#34;</em>) appears highlighted in amber.</li>
+<li><strong>Completion</strong>: The final step displays <strong>&#34;Finish Cooking!&#34;</strong>, congratulating the user and inviting plating recommendations.</li>
+</ul>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="10. Production Frontend Integrations (Optional)" duration="3">
+        <aside class="special"><p><strong>Optional Reference</strong>: You can finish the codelab with Section 9 above. For production deployments, you can render A2UI JSON on any client platform using official renderers:</p>
+</aside>
+<table>
+<tr><td colspan="1" rowspan="1"><p>Framework</p>
+</td><td colspan="1" rowspan="1"><p>Package / SDK</p>
+</td><td colspan="1" rowspan="1"><p>Installation</p>
+</td></tr>
+<tr><td colspan="1" rowspan="1"><p><strong>React</strong></p>
+</td><td colspan="1" rowspan="1"><p><code>@a2ui/react</code></p>
+</td><td colspan="1" rowspan="1"><p><code>npm install @a2ui/react</code></p>
+</td></tr>
+<tr><td colspan="1" rowspan="1"><p><strong>Angular</strong></p>
+</td><td colspan="1" rowspan="1"><p><code>@a2ui/angular</code></p>
+</td><td colspan="1" rowspan="1"><p><code>npm install @a2ui/angular</code></p>
+</td></tr>
+<tr><td colspan="1" rowspan="1"><p><strong>Lit / Web Components</strong></p>
+</td><td colspan="1" rowspan="1"><p><code>@a2ui/lit</code></p>
+</td><td colspan="1" rowspan="1"><p><code>npm install @a2ui/lit</code></p>
+</td></tr>
+<tr><td colspan="1" rowspan="1"><p><strong>Flutter</strong></p>
+</td><td colspan="1" rowspan="1"><p>Flutter GenUI SDK</p>
+</td><td colspan="1" rowspan="1"><p><code>flutter pub add genui</code></p>
+</td></tr>
+</table>
+<p>Because A2UI is decoupled from rendering engines, client applications translate the same JSON into native Material Design, Cupertino, or custom design system widgets.</p>
+
+
+      </google-codelab-step>
+    
+      <google-codelab-step label="11. Summary &amp; Checklist" duration="1">
+        <p>Congratulations! You built an interactive recipe assistant powered by ADK and A2UI.</p>
+<ul>
+<li>[x] <strong>Stage 1</strong>: Created a grounded agent retrieving recipe data without hallucination.</li>
+<li>[x] <strong>Stage 2</strong>: Used <code>a2ui-agent-sdk</code> to generate system prompts that guide Gemini to output structured A2UI v1.0 JSON.</li>
+<li>[x] <strong>Stage 3</strong>: Rendered the Default A2UI Catalog on the client using <code>@a2ui/react</code> and <code>@a2ui/web_core</code>, styled with CSS custom properties.</li>
+<li>[x] <strong>Stage 4</strong>: Authored a formal Custom Culinary Catalog (<code>recipe_agent/catalog.py</code> &amp; <code>culinaryCatalog.tsx</code>) with <code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, and <code>DefaultCard</code>.</li>
+<li>[x] <strong>Markdown Formatting</strong>: Formatted chef tips and general advice with full markdown rendering.</li>
+</ul>
+
+
+      </google-codelab-step>
+    
+  </google-codelab>
+
+  <script src="https://storage.googleapis.com/claat-public/native-shim.js"></script>
+  <script src="https://storage.googleapis.com/claat-public/custom-elements.min.js"></script>
+  <script src="https://storage.googleapis.com/claat-public/prettify.js"></script>
+  <script src="https://storage.googleapis.com/claat-public/codelab-elements.js"></script>
+  <script src="//support.google.com/inapp/api.js"></script>
+
+</body>
+</html>

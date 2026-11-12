@@ -1,0 +1,29 @@
+{
+  "environment": "web",
+  "format": "html",
+  "prefix": "https://storage.googleapis.com",
+  "mainga": "UA-49880327-14",
+  "updated": "2026-11-12T00:13:53+08:00",
+  "id": "a2ui-recipe-codelab-cloudshell",
+  "duration": 51,
+  "title": "Codelab: Interactive Recipe Experiences with ADK and A2UI in Google Cloud Shell",
+  "authors": "Shang Yi",
+  "summary": "Build and run an interactive AI culinary recipe assistant with Google ADK and A2UI v1.0 directly inside Google Cloud Shell.",
+  "source": "/var/folders/rh/cmbnxchn18j851735kgkcm_w0000gn/T/tmpq2zah8vp/a2ui-recipe-codelab-cloudshell.md",
+  "theme": "",
+  "status": [
+    "published"
+  ],
+  "category": [
+    "adk",
+    "a2ui",
+    "cloud-shell",
+    "gemini",
+    "react"
+  ],
+  "tags": [
+    "web"
+  ],
+  "feedback": "https://github.com/shangyilim/a2uirecipe/issues",
+  "url": "a2ui-recipe-codelab-cloudshell"
+}

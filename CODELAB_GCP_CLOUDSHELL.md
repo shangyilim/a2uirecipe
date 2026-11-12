@@ -6,9 +6,11 @@ Build an AI-powered culinary recipe dashboard using **Agent Development Kit (ADK
 
 ## 1. Overview
 
+**Author:** Shang Yi
+
 Most AI assistants reply to cooking inquiries with long walls of plain text or bulleted lists. In this codelab, you will use **A2UI** (Agent-to-User Interface) to enable your agent to reply with a rich, interactive user interface directly inside Google Cloud Platform without needing to install anything on your local workstation.
 
-The agent describes recipe cards, ingredients, cooking stats, and buttons in declarative JSON using the **A2UI v0.9.1** specification. The client renders them using its own native widgets—meaning new layouts and experiences do not require changes to frontend code.
+The agent describes recipe cards, ingredients, cooking stats, and buttons in declarative JSON using the **A2UI v1.0** specification. The client renders them using its own native widgets—meaning new layouts and experiences do not require changes to frontend code.
 
 ### What you'll build
 A **Recipe Assistant** built through four progressive stages:
@@ -52,10 +54,10 @@ A **Recipe Assistant** built through four progressive stages:
 - How to set up and run Python ADK and Node.js React workflows inside **Google Cloud Shell**.
 - How to access development servers using Cloud Shell's built-in **Web Preview** feature.
 - How to ground an ADK agent using Gemini with a **Google AI Studio API Key**.
-- How A2UI works: the **v0.9.1 specification**, the flat component model, top-down root ordering, and lifecycle messages (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`).
-- How to design custom A2UI primitives (`RecipeSummaryCard`, `RecipeDetailCard`, `GuidedCookingCard`, `DefaultCard`).
+- How A2UI works: the **v1.0 specification**, the flat component model, top-down root ordering, and lifecycle messages (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`).
+- How to enforce backend A2UI schema validation and LLM self-correction with `SendA2uiToClientToolset`.
+- How to design custom A2UI components (`RecipeSummaryCard`, `RecipeDetailCard`, `GuidedCookingCard`, `DefaultCard`).
 - How to create a **single-card step-by-step stepper** with client-side navigation and interactive countdown timers.
-- How to serve static food photography using ADK custom services (`recipe_agent/services.py`).
 
 ---
 
@@ -291,6 +293,7 @@ ROLE_DESCRIPTION = (
 )
 
 UI_DESCRIPTION = """
+- Every response renders as a new card in the chat timeline: ALWAYS start with 'createSurface' using a fresh unique 'surfaceId' (never emit 'updateComponents' for a surface created in an earlier turn).
 - The first component in 'components' MUST have id 'root'.
 - Use flat v1.0 components where 'component' is a string discriminator (e.g. 'Column', 'Text', 'Button').
 - Component IDs MUST be valid UAX #31 identifiers (letters, numbers, underscores only; NEVER hyphens '-').
@@ -439,26 +442,6 @@ Surface IDs are scoped to **currently active surfaces**. When a surface is delet
 }
 ```
 
-### 5. Standardized MIME Type & Bidirectional RPC
-- **MIME Type**: Official MIME type is standardized to `application/a2ui+json`.
-- **Bidirectional RPC**: v1.0 introduces native agent-renderer function invocation:
-  - `callRendererFunction` / `rendererFunctionResponse`
-  - `callAgentFunction` / `agentFunctionResponse`
-
-### Specification Evolution Quick Reference
-
-| Feature | v0.8.1 (Legacy) | v0.9 / v0.9.1 (Evolution) | v1.0 (Standardized) |
-| :--- | :--- | :--- | :--- |
-| **Envelope Version** | Omitted | `"v0.9.1"` | **`"version": "1.0"`** |
-| **MIME Type** | `application/json` | `application/a2ui+json` | **`application/a2ui+json`** |
-| **Data Binding** | `{ "path": "/key" }` | `{ "path": "/key" }` | **`{ "@path": "/key" }`** |
-| **Action / Call** | `{ "call": "fn" }` | `{ "type": "fn", "context": {...} }` | **`{ "@call": "fn", "args": {...} }`** |
-| **Surface Creation** | `beginRendering: { root }` | `createSurface: { surfaceId }` | **`createSurface` (supports embedded components & dataModel)** |
-| **Theme in Surface** | Deprecated | `theme: {...}` | **Removed** (native client theme) |
-| **Component Model** | Nested `{ "component": { "Text": {...} } }` | Flat `{ "component": "Text", ... }` | **Flat `{ "component": "Text", ... }`** |
-| **Root Convention** | Parameter in `beginRendering` | Component with `"id": "root"` | **Component with `"id": "root"` placed first** |
-| **Surface ID Scope** | Lifetime of renderer | Active surfaces | **Currently active surfaces** |
-
 ---
 
 ## 7. Stage 3: Render Default A2UI Catalog on the Client
@@ -489,6 +472,7 @@ from a2ui.core.basic_catalog import BasicCatalog
 from a2ui.core.schema import ProtocolVersion
 from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
 from a2ui.processor import A2uiRequestProcessor
+from a2ui.utils.renderer_state import RendererState
 from .recipes import get_recipes
 
 # ==============================================================================
@@ -499,10 +483,20 @@ gemini_model = Gemini(
     retry_options=types.HttpRetryOptions(attempts=5),
 )
 
+catalogs = [BasicCatalog(ProtocolVersion.V1_0)]
+
 processor = A2uiRequestProcessor(
-    [BasicCatalog(ProtocolVersion.V1_0)],
+    catalogs,
     format_factory=DirectJsonFormatFactory(),
 )
+
+
+def create_turn_processor(_ctx=None) -> A2uiRequestProcessor:
+    return A2uiRequestProcessor(
+        catalogs,
+        format_factory=DirectJsonFormatFactory(),
+        state=RendererState(catalogs),
+    )
 
 ROLE_DESCRIPTION = (
     "You are an expert culinary assistant and interactive recipe dashboard. "
@@ -528,7 +522,8 @@ UI_DESCRIPTION = (
     "### A2UI v1.0 Component Specifications:\n"
     "Construct rich A2UI v1.0 surfaces following these rules:\n"
     "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
-    "2. A2UI v1.0 ENVELOPE: Set \"version\": \"1.0\" in each A2UI message.\n"
+    "2. PER-TURN SURFACE CREATION: Every response renders as a new independent card in the chat timeline. ALWAYS start with `createSurface` using a fresh unique `surfaceId` (and never emit `updateComponents` for a surface from an earlier turn).\n"
+    "3. A2UI v1.0 ENVELOPE: Set \"version\": \"1.0\" in each A2UI message.\n"
     "3. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
     "4. FLAT v1.0 COMPONENT MODEL & UAX #31 IDENTIFIERS: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object. Component IDs MUST be valid UAX #31 identifiers (use letters, numbers, and underscores like 'header_text', 'recipe_card_1'; NEVER use hyphens '-').\n"
     "5. BUTTON ACTIONS: Every 'Button' component MUST have a valid v1.0 action with the exact recipe name in context:\n"
@@ -554,11 +549,11 @@ a2ui_instruction = A2uiInstruction(
     a2ui_processor=processor,
 )
 
-# Validates outgoing A2UI payloads against BasicCatalog on the backend and
-# automatically triggers LLM self-correction if any schema violation occurs.
+# Validates outgoing A2UI payloads against BasicCatalog + a fresh per-turn RendererState
+# so missing createSurface or schema violations trigger automatic LLM self-correction.
 a2ui_toolset = SendA2uiToClientToolset(
     a2ui_enabled=True,
-    a2ui_processor=processor,
+    a2ui_processor=create_turn_processor,
 )
 
 root_agent = Agent(
@@ -592,12 +587,26 @@ If you want to understand how the client-side Default Renderer is put together, 
    - `App.tsx` provides a header toggle (**`Default (@a2ui/react)`** vs. **`Custom Catalog`**) and renders `<DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} />` when Default mode is active.
 
 #### Test the Default Renderer & Understand Why to Switch to Custom UI Components
-1. Start the ADK backend (port `8080`) and the React frontend (port `3000`) (see **Section 11.2–11.4** for Cloud Shell Vite proxy & Web Preview setup).
-2. In the app header, select **`Default (@a2ui/react)`** and ask:
+1. Open **two Cloud Shell terminal tabs** (click **`+`** on the terminal bar):
+   - **Tab 1 — Start the ADK Backend (port `8080`)**:
+     ```bash
+     cd ~/a2uirecipe
+     source .venv/bin/activate
+     .venv/bin/adk web --port 8080 --allow_origins "*" --reload_agents
+     ```
+   - **Tab 2 — Install & Start the React Frontend (port `3000`)**:
+     ```bash
+     cd ~/a2uirecipe/frontend
+     npm install
+     npm run dev -- --host 0.0.0.0 --port 3000
+     ```
+     > **Tip for Cloud Shell**: Passing `--host 0.0.0.0` ensures the Vite development server binds to all interfaces so Cloud Shell's Web Preview proxy can reach it (Vite's pre-configured proxy in `frontend/vite.config.ts` forwards `/list-apps`, `/apps`, `/run`, and `/images` to port `8080`).
+2. Click the **Web Preview** icon (`>_` with an eye) → **Change port** → enter `3000` → **Change and Preview**.
+3. In the app header, select **`Default (@a2ui/react)`** and ask:
    ```text
    What can I make for dinner tonight?
    ```
-3. Notice how `@a2ui/react` renders standard `Card`, `Column`, `Row`, `Image`, `Text`, and `Button` components directly from your agent's `BasicCatalog` output—and clicking **"View"** or **"Let's Cook This"** triggers the next turn.
+4. Notice how `@a2ui/react` renders standard `Card`, `Column`, `Row`, `Image`, `Text`, and `Button` components directly from your agent's `BasicCatalog` output—and clicking **"View"** or **"Let's Cook This"** triggers the next turn.
 
 While turnkey default rendering is ideal for generic interfaces (forms, settings panels, and informational cards), specialized culinary experiences benefit from custom domain components:
 - **Culinary Discovery Cards**: Rich photography headers, cooking time badges, calorie meters, and cuisine tags (`RecipeSummaryCard`).
@@ -609,6 +618,12 @@ Now that you have tested the default renderer in Stage 3, let's move to **Stage 
 ---
 
 ## 8. Stage 4: Author a Formal Custom A2UI Catalog
+
+> [!TIP]
+> **Catch-up Checkpoint**: If you want to jump straight to Stage 4 or need to reset your code from Stage 3, you can optionally check out the `stage3` branch in your terminal:
+> ```bash
+> git checkout stage3
+> ```
 
 Following the [A2UI Authoring Components Guide](https://a2ui.org/guides/authoring-components/#1-defining-the-catalog-schema), we define a formal, contract-driven Custom Catalog across both backend (Pydantic) and frontend (Zod + `@a2ui/react`'s `createComponentImplementation`).
 
@@ -799,6 +814,7 @@ from google.adk.models import Gemini
 from a2ui.adk import A2uiInstruction, SendA2uiToClientToolset
 from a2ui.inference_formats.direct_json import DirectJsonFormatFactory
 from a2ui.processor import A2uiRequestProcessor
+from a2ui.utils.renderer_state import RendererState
 from .catalog import CULINARY_CATALOG_ID, create_culinary_catalog
 from .recipes import get_recipes
 
@@ -810,10 +826,20 @@ gemini_model = Gemini(
     retry_options=types.HttpRetryOptions(attempts=5),
 )
 
+catalogs = [create_culinary_catalog()]
+
 processor = A2uiRequestProcessor(
-    [create_culinary_catalog()],
+    catalogs,
     format_factory=DirectJsonFormatFactory(),
 )
+
+
+def create_turn_processor(_ctx=None) -> A2uiRequestProcessor:
+    return A2uiRequestProcessor(
+        catalogs,
+        format_factory=DirectJsonFormatFactory(),
+        state=RendererState(catalogs),
+    )
 
 ROLE_DESCRIPTION = (
     "You are an expert culinary assistant and interactive recipe dashboard. "
@@ -841,112 +867,13 @@ WORKFLOW_DESCRIPTION = (
 )
 
 UI_DESCRIPTION = (
-    "### A2UI v1.0 Component Specifications:\n"
-    "Construct rich A2UI v1.0 surfaces following these rules:\n"
-    "1. First call get_recipes to fetch authentic recipes. Do NOT invent recipes or image URLs.\n"
-    f"2. A2UI v1.0 ENVELOPE & CATALOG: Set \"version\": \"1.0\" in each A2UI message and \"catalogId\": \"{CULINARY_CATALOG_ID}\" in createSurface.\n"
-    "3. TOP-DOWN ORDERING & ROOT: The first element in 'components' MUST be the root container with id 'root'.\n"
-    "4. FLAT v1.0 COMPONENT MODEL & UAX #31 IDENTIFIERS: Every component has 'id', 'component': '<Type>', and its properties placed directly on the object. Component IDs MUST be valid UAX #31 identifiers (use letters, numbers, and underscores like 'header_text', 'recipe_summary_1'; NEVER use hyphens '-').\n"
-    "5. BUTTON ACTIONS: Every 'Button' component MUST have a valid v1.0 action with the exact recipe name in context:\n"
-    "   - View Button: \"action\": {\"event\": {\"name\": \"view_recipe\", \"context\": {\"recipe_name\": \"<exact recipe name>\"}}}\n"
-    "   - Cook Button: \"action\": {\"event\": {\"name\": \"start_cooking\", \"context\": {\"recipe_name\": \"<exact recipe name>\"}}}\n"
-    "   Always supply the exact recipe name from the tool in the context object.\n\n"
-    "6. Root Container Example:\n"
-    "{\n"
-    '  "id": "root",\n'
-    '  "component": "Column",\n'
-    '  "children": ["recipe_summary_1", "recipe_summary_2"],\n'
-    '  "justify": "start"\n'
-    "}\n\n"
-    "7. Custom Component: 'RecipeSummaryCard' (FOR RECIPE LISTS & RECOMMENDATIONS):\n"
-    "{\n"
-    '  "id": "recipe_summary_<id>",\n'
-    '  "component": "RecipeSummaryCard",\n'
-    '  "recipeId": "<recipe.id>",\n'
-    '  "name": "<recipe.name>",\n'
-    '  "description": "<recipe.description>",\n'
-    '  "cookTime": "<recipe.cook_time>",\n'
-    '  "prepTime": "<recipe.prep_time>",\n'
-    '  "difficulty": "<recipe.difficulty>",\n'
-    '  "calories": "<recipe.calories>",\n'
-    '  "cuisine": "<recipe.cuisine>",\n'
-    '  "badge": "<recipe.badge>",\n'
-    '  "imageUrl": "<recipe.image_url>"\n'
-    "}\n\n"
-    "8. Custom Component: 'RecipeDetailCard' (WHEN VIEWING DETAILS):\n"
-    "{\n"
-    '  "id": "recipe_detail_<id>",\n'
-    '  "component": "RecipeDetailCard",\n'
-    '  "recipeId": "<recipe.id>",\n'
-    '  "name": "<recipe.name>",\n'
-    '  "description": "<recipe.description>",\n'
-    '  "prepTime": "<recipe.prep_time>",\n'
-    '  "cookTime": "<recipe.cook_time>",\n'
-    '  "servings": <recipe.servings>,\n'
-    '  "difficulty": "<recipe.difficulty>",\n'
-    '  "calories": "<recipe.calories>",\n'
-    '  "cuisine": "<recipe.cuisine>",\n'
-    '  "badge": "<recipe.badge>",\n'
-    '  "imageUrl": "<recipe.image_url>",\n'
-    '  "ingredients": <recipe.ingredients>,\n'
-    '  "showCookButton": true\n'
-    "}\n\n"
-    "9. Custom Component: 'GuidedCookingCard' (FOR STEP-BY-STEP GUIDED COOKING - ALL STEPS IN 1 CARD):\n"
-    "Bundle ALL steps for the recipe in a single GuidedCookingCard so the user navigates locally with Next and Previous buttons:\n"
-    "{\n"
-    '  "id": "guided_cooking_1",\n'
-    '  "component": "GuidedCookingCard",\n'
-    '  "dish": "Classic Roman Carbonara",\n'
-    '  "steps": [\n'
-    '    {\n'
-    '      "step": 1,\n'
-    '      "title": "Boil Pasta until Al Dente",\n'
-    '      "instruction": "Bring a large pot of salted water to a gentle boil and cook spaghetti until al dente.",\n'
-    '      "duration": "10 mins",\n'
-    '      "timerMinutes": 10,\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Save 1/2 cup of starchy pasta water before draining!"\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 2,\n'
-    '      "title": "Crisp the Guanciale",\n'
-    '      "instruction": "In a large skillet, cook sliced guanciale over medium heat until golden and crispy.",\n'
-    '      "duration": "5 mins",\n'
-    '      "timerMinutes": 5,\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Render fat slowly for extra crunch."\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 3,\n'
-    '      "title": "Whisk Egg and Cheese Mixture",\n'
-    '      "instruction": "In a bowl, whisk whole eggs, egg yolks, grated Pecorino Romano, and freshly cracked black pepper.",\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Whisk until a thick, creamy paste forms."\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 4,\n'
-    '      "title": "Combine Pasta and Guanciale",\n'
-    '      "instruction": "Transfer al dente pasta into the skillet with guanciale and toss to coat in rendered fat off the heat.",\n'
-    '      "dish": "Classic Roman Carbonara"\n'
-    '    },\n'
-    '    {\n'
-    '      "step": 5,\n'
-    '      "title": "Emulsify Carbonara Sauce",\n'
-    '      "instruction": "Off the heat, quickly pour in egg mixture while vigorously tossing pasta. Splash reserved pasta water as needed to create a glossy sauce.",\n'
-    '      "dish": "Classic Roman Carbonara",\n'
-    '      "tip": "Keep skillet off heat to prevent eggs from scrambling!"\n'
-    '    }\n'
-    '  ]\n'
-    "}\n\n"
-    "10. Custom Component: 'DefaultCard' (FOR GENERAL TEXT & EXPLANATIONS WITH MARKDOWN):\n"
-    "Use this default card whenever showing explanations, dietary notes, cooking tips, or general messages. It fully formats markdown:\n"
-    "{\n"
-    '  "id": "info_card_1",\n'
-    '  "component": "DefaultCard",\n'
-    '  "title": "Chef\'s Tip & Dietary Notes",\n'
-    '  "text": "### How to Perfect Carbonara\\n\\n- **Never add heavy cream**: Emulsion of egg yolks and starchy water creates the silky texture.\\n- **Toast the pepper**: Toasted black pepper releases fragrant essential oils."\n'
-    "}\n\n"
-    "Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool with a valid payload matching the catalog schema."
+    "### A2UI v1.0 Culinary UI Rules:\n"
+    "- Every response renders as a new independent card in the chat timeline. ALWAYS start with `createSurface` using a fresh unique `surfaceId` (e.g. `recipe_list_1`, `recipe_detail_carbonara_1`, `guided_cooking_1`), and either embed `components` directly inside `createSurface` or follow with `updateComponents` using that exact same `surfaceId`. NEVER emit `updateComponents` or `updateDataModel` for a `surfaceId` created in an earlier turn.\n"
+    f"- Set \"catalogId\": \"{CULINARY_CATALOG_ID}\" in createSurface.\n"
+    "- Use UAX #31 identifiers for component IDs (letters, numbers, underscores only; NEVER use hyphens '-').\n"
+    "- Prefer the custom culinary components ('RecipeSummaryCard', 'RecipeDetailCard', 'GuidedCookingCard', 'DefaultCard') over generic BasicCatalog primitives whenever applicable.\n"
+    "- If rendering any standard 'Button', set action event 'view_recipe' or 'start_cooking' with '{\"recipe_name\": \"<exact recipe name>\"}' in context.\n"
+    "- Deliver the A2UI v1.0 JSON array by calling the send_a2ui_json_to_client tool."
 )
 
 a2ui_instruction = A2uiInstruction(
@@ -960,7 +887,7 @@ a2ui_instruction = A2uiInstruction(
 
 a2ui_toolset = SendA2uiToClientToolset(
     a2ui_enabled=True,
-    a2ui_processor=processor,
+    a2ui_processor=create_turn_processor,
 )
 
 root_agent = Agent(
@@ -973,7 +900,7 @@ root_agent = Agent(
 ```
 
 ### 8.3 Create the Frontend Zod Catalog (`frontend/src/catalog/culinaryCatalog.tsx`)
-Create `frontend/src/catalog/culinaryCatalog.tsx` in Cloud Shell Editor (also add `"zod": "^3.25.76"` to `frontend/package.json` dependencies if not already listed):
+Create `frontend/src/catalog/culinaryCatalog.tsx` in Cloud Shell Editor:
 
 ```tsx
 // frontend/src/catalog/culinaryCatalog.tsx
@@ -1313,128 +1240,12 @@ What can I make for dinner tonight?
 
 ---
 
-## 10. Simulated Remote Food Photography & ADK Custom Services
+## 10. Production Deployment on Google Cloud (Optional)
 
-To serve food photography assets without needing external cloud storage buckets, the agent packages its images and custom FastAPI service hooks:
+> [!NOTE]
+> **Optional Step**: You can finish the codelab with Section 9 above—follow this section only if you want to deploy your A2UI Recipe Assistant to production on Google Cloud:
 
-1. **Asset Directory** (`recipe_agent/images/`):
-   Contains food photography for each dish (`carbonara.jpg`, `pad_krapow.jpg`, `quinoa_bowl.jpg`, `tuscan_salmon.jpg`, `berry_parfait.jpg`).
-2. **Agent Service Module** (`recipe_agent/services.py`):
-   Hooks into ADK's `ApiServer` on boot to mount `/images` as a static file route:
-   ```python
-   # recipe_agent/services.py
-   import os
-   from fastapi.staticfiles import StaticFiles
-   import google.adk.cli.api_server as adk_api_server
-
-   _orig_get_fast_api_app = adk_api_server.ApiServer.get_fast_api_app
-
-   def _custom_get_fast_api_app(self, *args, **kwargs):
-       app = _orig_get_fast_api_app(self, *args, **kwargs)
-       images_dir = os.path.join(os.path.dirname(__file__), "images")
-       if os.path.exists(images_dir):
-           app.mount("/images", StaticFiles(directory=images_dir), name="recipe_images")
-       return app
-
-   if getattr(adk_api_server.ApiServer, "_has_custom_images_mount", False) is False:
-       adk_api_server.ApiServer.get_fast_api_app = _custom_get_fast_api_app
-       adk_api_server.ApiServer._has_custom_images_mount = True
-   ```
-3. **Root Delegation** (`services.py`):
-   A clean one-line delegate at the project root ensures the service is loaded whether `adk web` is run from the workspace root or targeting `recipe_agent` directly:
-   ```python
-   from recipe_agent import services
-   ```
-
----
-
-## 11. React Client Companion in Google Cloud Shell
-
-A complete React application is provided in the `frontend/` directory to demonstrate client-side A2UI rendering with modern styling and responsive interactions.
-
-### 11.1 Multi-Port Architecture in Cloud Shell
-Inside Cloud Shell, we run two simultaneous servers:
-- **ADK Backend Server**: Port `8080`
-- **React Frontend Dev Server (Vite)**: Port `3000`
-
-### 11.2 Configure Cloud Shell Vite Proxy (Avoid CORS & Auth Redirects)
-
-Cloud Shell secures each Web Preview port (`3000-...cloudshell.dev` and `8080-...cloudshell.dev`) behind separate Google Cloud authentication session cookies. If the browser on port 3000 attempts to `fetch()` directly to port 8080, Cloud Shell attempts an authentication cookie hop (`/_cloudshell/forwardAuthCookie`), which the browser blocks under standard cross-origin (CORS) security rules.
-
-To resolve this seamlessly, configure Vite's dev server inside `frontend/vite.config.ts` to proxy all agent API calls locally:
-
-```typescript
-// frontend/vite.config.ts
-
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    port: 3000,
-    proxy: {
-      '/list-apps': {
-        target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
-      },
-      '/apps': {
-        target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
-      },
-      '/run': {
-        target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
-      },
-      '/images': {
-        target: 'http://127.0.0.1:8080',
-        changeOrigin: true,
-      },
-    },
-  },
-});
-```
-
-> [!IMPORTANT]
-> **Remove or Clear `frontend/.env.local`**: If you previously created `frontend/.env.local` pointing to an `https://8080-cs-...` URL or `http://127.0.0.1:8080`, remove it so the client makes relative same-origin requests:
-> ```bash
-> rm -f ~/a2uirecipe/frontend/.env.local
-> ```
-> With the Vite proxy configured and relative URLs, all requests hit `https://3000-...` (same origin) and Vite proxies them internally over `127.0.0.1:8080` without cross-origin redirects!
-
-### 11.3 Run the Servers in Google Cloud Shell
-Open **two Cloud Shell terminal tabs** (click the **`+`** icon on the Cloud Shell terminal bar to open a second tab):
-
-#### In Tab 1: Start ADK Backend
-```bash
-cd ~/a2uirecipe
-source .venv/bin/activate
-export RECIPE_STAGE=3
-.venv/bin/adk web --port 8080 --allow_origins "*" --reload_agents
-```
-
-#### In Tab 2: Start React Frontend
-```bash
-cd ~/a2uirecipe/frontend
-npm install
-npm run dev -- --host 0.0.0.0 --port 3000
-```
-> **Tip for Cloud Shell**: Passing `--host 0.0.0.0` ensures the Vite development server binds to all interfaces, allowing Cloud Shell's Web Preview proxy to reach it.
-
-### 11.4 Access the React Frontend via Web Preview
-1. Click the **Web Preview** icon (`>_` with an eye) in the top-right toolbar of Cloud Shell.
-2. Select **Change port**.
-3. Type `3000` and click **Change and Preview**.
-4. The React Culinary Recipe Assistant application opens in a new tab!
-5. Test sending `"What can I make for dinner tonight?"` and interact with the custom discovery cards, details, and guided cooking stepper.
-
----
-
-## 12. Production Deployment on Google Cloud
-
-When you are ready to deploy your A2UI Recipe Assistant to production on Google Cloud:
-
-### 12.1 Deploying the ADK Backend to Cloud Run
+### 10.1 Deploying the ADK Backend to Cloud Run
 Containerize the ADK agent and deploy with serverless auto-scaling on **Cloud Run**:
 ```bash
 # Build and deploy container directly to Cloud Run
@@ -1442,10 +1253,10 @@ gcloud run deploy recipe-assistant-backend \
   --source . \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars RECIPE_STAGE=3,GEMINI_API_KEY=${GEMINI_API_KEY}
+  --set-env-vars GEMINI_API_KEY=${GEMINI_API_KEY}
 ```
 
-### 12.2 Deploying the Frontend to Firebase App Hosting / Cloud Storage
+### 10.2 Deploying the Frontend to Firebase App Hosting / Cloud Storage
 Build the React production bundle:
 ```bash
 cd frontend
@@ -1455,7 +1266,7 @@ Deploy the `dist/` directory to **Firebase Hosting** or **Cloud Storage + Cloud 
 
 ---
 
-## 13. Summary & Checklist
+## 11. Summary & Checklist
 
 Congratulations! You built and ran a full-stack, AI-powered interactive recipe assistant inside **Google Cloud Shell** using **ADK** and **A2UI**.
 
@@ -1464,6 +1275,4 @@ Congratulations! You built and ran a full-stack, AI-powered interactive recipe a
 - [x] **Stage 2**: Used `a2ui-agent-sdk` to generate prompts guiding Gemini to output structured A2UI v1.0 JSON.
 - [x] **Stage 3**: Rendered the Default A2UI Catalog on the client using `@a2ui/react` and `@a2ui/web_core`, styled with CSS custom properties.
 - [x] **Stage 4**: Authored a formal Custom Culinary Catalog (`recipe_agent/catalog.py` & `culinaryCatalog.tsx`) with `RecipeSummaryCard`, `RecipeDetailCard`, `GuidedCookingCard`, and `DefaultCard`.
-- [x] **Single-Card Guided Stepper**: Packaged all recipe steps into 1 card with zero-latency local Next/Previous buttons and live countdown timers.
-- [x] **Web Preview**: Accessed and tested both port 8080 (ADK) and port 3000 (React) using Cloud Shell's built-in Web Preview.
 - [x] **Cloud Native**: Documented serverless deployment paths using Cloud Run and Firebase Hosting.
