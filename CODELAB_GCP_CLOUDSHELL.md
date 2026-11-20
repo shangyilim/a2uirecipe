@@ -32,7 +32,7 @@ A **Recipe Assistant** built through four progressive stages:
                               ▼
                  +──────────────────────────+
                  |  Gemini 3.5 Flash-Lite   |
-                 |    (Google AI Studio)    |
+                 |       (Gemini API)       |
                  +──────────────────────────+
                               │
                Calls Tool: get_recipes() (Grounded)
@@ -53,7 +53,7 @@ A **Recipe Assistant** built through four progressive stages:
 ### What you'll learn
 - How to set up and run Python ADK and Node.js React workflows inside **Google Cloud Shell**.
 - How to access development servers using Cloud Shell's built-in **Web Preview** feature.
-- How to ground an ADK agent using Gemini with a **Google AI Studio API Key**.
+- How to ground an ADK agent using Gemini with a **Gemini API Key**.
 - How A2UI works: the **v1.0 specification**, the flat component model, top-down root ordering, and lifecycle messages (`createSurface`, `updateComponents`, `updateDataModel`, `deleteSurface`).
 - How to enforce backend A2UI schema validation and LLM self-correction with `SendA2uiToClientToolset`.
 - How to design custom A2UI components (`RecipeSummaryCard`, `RecipeDetailCard`, `GuidedCookingCard`, `DefaultCard`).
@@ -114,13 +114,14 @@ To easily explore and edit files throughout this codelab, open the Cloud Shell b
 3. In the left file explorer sidebar, expand the `a2uirecipe` directory to inspect the project layout, source code, and configuration files.
 
 ### 2.6 Create and Configure `.env` in Cloud Shell Editor
-To call Gemini, obtain an API key from Google AI Studio and configure your environment file directly in Cloud Shell Editor:
+To call Gemini, generate an API key using `gcloud` and configure your environment file directly in Cloud Shell Editor:
 
-1. **Obtain your Gemini API Key**:
-   - Go to [Google AI Studio Get API Key](https://aistudio.google.com/app/apikey).
-   - Click **Create API key**.
-   - When prompted to choose a project, click **Select existing project** and pick the **same Google Cloud Project** you selected in Step 2.1.
-   - Click **Create API key in existing project** and copy the generated key.
+1. **Generate your Gemini API Key**:
+   Run the following command in the Cloud Shell terminal:
+   ```bash
+   gcloud services api-keys create --display-name="Gemini API Key" --api-target=service=generativelanguage.googleapis.com --format="value(response.keyString)"
+   ```
+   Copy the generated API key string from the command output.
 
 2. **Create `.env` in Cloud Shell Editor**:
    - In the Cloud Shell Editor file explorer sidebar, expand `a2uirecipe` > `recipe_agent`.
@@ -1275,7 +1276,7 @@ Deploy the `dist/` directory to **Firebase Hosting** or **Cloud Storage + Cloud 
 
 Congratulations! You built and ran a full-stack, AI-powered interactive recipe assistant inside **Google Cloud Shell** using **ADK** and **A2UI**.
 
-- [x] **Cloud Shell Environment**: Configured Python venv, Node.js, and Google AI Studio credentials.
+- [x] **Cloud Shell Environment**: Configured Python venv, Node.js, and Gemini API credentials.
 - [x] **Stage 1**: Created a grounded agent retrieving recipe data without hallucination.
 - [x] **Stage 2**: Used `a2ui-agent-sdk` to generate prompts guiding Gemini to output structured A2UI v1.0 JSON.
 - [x] **Stage 3**: Rendered the Default A2UI Catalog on the client using `@a2ui/react` and `@a2ui/web_core`, styled with CSS custom properties.

@@ -111,7 +111,7 @@
                               ▼
                  +──────────────────────────+
                  |  Gemini 3.5 Flash-Lite   |
-                 |    (Google AI Studio)    |
+                 |       (Gemini API)       |
                  +──────────────────────────+
                               │
                Calls Tool: get_recipes() (Grounded)
@@ -132,7 +132,7 @@
 <ul class="checklist">
 <li>How to set up and run Python ADK and Node.js React workflows inside <strong>Google Cloud Shell</strong>.</li>
 <li>How to access development servers using Cloud Shell&#39;s built-in <strong>Web Preview</strong> feature.</li>
-<li>How to ground an ADK agent using Gemini with a <strong>Google AI Studio API Key</strong>.</li>
+<li>How to ground an ADK agent using Gemini with a <strong>Gemini API Key</strong>.</li>
 <li>How A2UI works: the <strong>v1.0 specification</strong>, the flat component model, top-down root ordering, and lifecycle messages (<code>createSurface</code>, <code>updateComponents</code>, <code>updateDataModel</code>, <code>deleteSurface</code>).</li>
 <li>How to enforce backend A2UI schema validation and LLM self-correction with <code>SendA2uiToClientToolset</code>.</li>
 <li>How to design custom A2UI components (<code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, <code>DefaultCard</code>).</li>
@@ -183,15 +183,11 @@ pip install google-adk a2ui-agent-sdk a2ui-adk
 <li>In the left file explorer sidebar, expand the <code>a2uirecipe</code> directory to inspect the project layout, source code, and configuration files.</li>
 </ol>
 <h2 is-upgraded>2.6 Create and Configure <code>.env</code> in Cloud Shell Editor</h2>
-<p>To call Gemini, obtain an API key from Google AI Studio and configure your environment file directly in Cloud Shell Editor:</p>
+<p>To call Gemini, generate an API key using <code>gcloud</code> and configure your environment file directly in Cloud Shell Editor:</p>
 <ol type="1">
-<li><strong>Obtain your Gemini API Key</strong>:<ul>
-<li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio Get API Key</a>.</li>
-<li>Click <strong>Create API key</strong>.</li>
-<li>When prompted to choose a project, click <strong>Select existing project</strong> and pick the <strong>same Google Cloud Project</strong> you selected in Step 2.1.</li>
-<li>Click <strong>Create API key in existing project</strong> and copy the generated key.</li>
-</ul>
-</li>
+<li><strong>Generate your Gemini API Key</strong>: Run the following command in the Cloud Shell terminal:<pre><code language="language-bash" class="language-bash">gcloud services api-keys create --display-name=&#34;Gemini API Key&#34; --api-target=service=generativelanguage.googleapis.com --format=&#34;value(response.keyString)&#34;
+</code></pre>
+Copy the generated API key string from the command output.</li>
 <li><strong>Create </strong><strong><code>.env</code></strong><strong> in Cloud Shell Editor</strong>:<ul>
 <li>In the Cloud Shell Editor file explorer sidebar, expand <code>a2uirecipe</code> &gt; <code>recipe_agent</code>.</li>
 <li>Right-click the <code>recipe_agent</code> folder and select <strong>New File</strong>.</li>
@@ -1309,7 +1305,7 @@ npm run build
       <google-codelab-step label="11. Summary &amp; Checklist" duration="1">
         <p>Congratulations! You built and ran a full-stack, AI-powered interactive recipe assistant inside <strong>Google Cloud Shell</strong> using <strong>ADK</strong> and <strong>A2UI</strong>.</p>
 <ul>
-<li>[x] <strong>Cloud Shell Environment</strong>: Configured Python venv, Node.js, and Google AI Studio credentials.</li>
+<li>[x] <strong>Cloud Shell Environment</strong>: Configured Python venv, Node.js, and Gemini API credentials.</li>
 <li>[x] <strong>Stage 1</strong>: Created a grounded agent retrieving recipe data without hallucination.</li>
 <li>[x] <strong>Stage 2</strong>: Used <code>a2ui-agent-sdk</code> to generate prompts guiding Gemini to output structured A2UI v1.0 JSON.</li>
 <li>[x] <strong>Stage 3</strong>: Rendered the Default A2UI Catalog on the client using <code>@a2ui/react</code> and <code>@a2ui/web_core</code>, styled with CSS custom properties.</li>
