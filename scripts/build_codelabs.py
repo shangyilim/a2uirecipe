@@ -173,6 +173,161 @@ def transform_for_claat(markdown_text: str, spec: CodelabSpec) -> tuple[str, str
     return title, output
 
 
+COPY_BUTTON_CSS = """
+    .code-wrapper {
+      position: relative;
+      margin: 16px 0;
+    }
+    .code-wrapper > pre {
+      margin: 0 !important;
+    }
+    .copy-code-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 9px;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1;
+      color: #5f6368;
+      background-color: #ffffff;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.15);
+      transition: all 0.15s ease-in-out;
+      z-index: 10;
+      opacity: 0.85;
+      user-select: none;
+    }
+    .code-wrapper:hover .copy-code-btn {
+      opacity: 1;
+    }
+    .copy-code-btn:hover {
+      background-color: #f8f9fa;
+      color: #202124;
+      border-color: #bdc1c6;
+      box-shadow: 0 1px 3px rgba(60,64,67,0.25);
+    }
+    .copy-code-btn:active {
+      background-color: #e8eaed;
+      box-shadow: none;
+    }
+    .copy-code-btn.copied {
+      color: #1e8e3e;
+      border-color: #1e8e3e;
+      background-color: #e6f4ea;
+      opacity: 1;
+    }
+    .copy-code-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+"""
+
+COPY_BUTTON_JS = """
+  <script>
+    function setupCopyButtons() {
+      document.querySelectorAll('pre').forEach(function(pre) {
+        if (pre.closest('.code-wrapper') || pre.querySelector('.copy-code-btn')) return;
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'code-wrapper';
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-code-btn';
+        copyBtn.type = 'button';
+        copyBtn.setAttribute('aria-label', 'Copy code snippet');
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg><span>Copy</span>';
+
+        copyBtn.addEventListener('click', function() {
+          var code = pre.querySelector('code') || pre;
+          var textToCopy = (code.innerText || code.textContent || '').replace(/\\r\\n/g, '\\n').replace(/^\\n+|\\n+$/g, '');
+
+          function showSuccess() {
+            copyBtn.classList.add('copied');
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span>Copied!</span>';
+            setTimeout(function() {
+              copyBtn.classList.remove('copied');
+              copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg><span>Copy</span>';
+            }, 2000);
+          }
+
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(textToCopy).then(showSuccess).catch(function() {
+              fallbackCopy(textToCopy, showSuccess);
+            });
+          } else {
+            fallbackCopy(textToCopy, showSuccess);
+          }
+        });
+
+        wrapper.appendChild(copyBtn);
+      });
+    }
+
+    function fallbackCopy(text, cb) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        cb();
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupCopyButtons);
+    } else {
+      setupCopyButtons();
+    }
+    window.addEventListener('load', setupCopyButtons);
+    document.addEventListener('google-codelab-ready', setupCopyButtons);
+    window.addEventListener('hashchange', function() {
+      setTimeout(setupCopyButtons, 50);
+    });
+  </script>
+"""
+
+
+def inject_copy_buttons(html_path: Path) -> None:
+    """Inject copy button styles and script into generated claat index.html."""
+    if not html_path.exists():
+        return
+    content = html_path.read_text(encoding="utf-8")
+    if "copy-code-btn" in content:
+        return
+
+    if "</style>" in content:
+        content = content.replace("</style>", f"{COPY_BUTTON_CSS}\n  </style>", 1)
+    elif "</head>" in content:
+        content = content.replace("</head>", f"  <style>{COPY_BUTTON_CSS}\n  </style>\n</head>", 1)
+
+    if "</body>" in content:
+        content = content.replace("</body>", f"{COPY_BUTTON_JS}\n</body>", 1)
+    else:
+        content += f"\n{COPY_BUTTON_JS}"
+
+    html_path.write_text(content, encoding="utf-8")
+
+
 def write_landing_index(exported: list[tuple[CodelabSpec, str]]) -> None:
     """Write docs/index.html linking to all exported static codelabs."""
     cards = []
@@ -300,6 +455,9 @@ def main() -> None:
         subprocess.run(cmd, check=True, env={**os.environ, "HOME": str(Path.home())})
 
     write_landing_index(exported)
+    for spec, _ in exported:
+        inject_copy_buttons(DOCS_DIR / spec.codelab_id / "index.html")
+
     print(f"Exported {len(exported)} codelabs to {DOCS_DIR}")
 
 

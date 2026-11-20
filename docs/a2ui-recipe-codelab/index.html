@@ -17,6 +17,63 @@
     .error {
       color: red;
     }
+  
+    .code-wrapper {
+      position: relative;
+      margin: 16px 0;
+    }
+    .code-wrapper > pre {
+      margin: 0 !important;
+    }
+    .copy-code-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 9px;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1;
+      color: #5f6368;
+      background-color: #ffffff;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.15);
+      transition: all 0.15s ease-in-out;
+      z-index: 10;
+      opacity: 0.85;
+      user-select: none;
+    }
+    .code-wrapper:hover .copy-code-btn {
+      opacity: 1;
+    }
+    .copy-code-btn:hover {
+      background-color: #f8f9fa;
+      color: #202124;
+      border-color: #bdc1c6;
+      box-shadow: 0 1px 3px rgba(60,64,67,0.25);
+    }
+    .copy-code-btn:active {
+      background-color: #e8eaed;
+      box-shadow: none;
+    }
+    .copy-code-btn.copied {
+      color: #1e8e3e;
+      border-color: #1e8e3e;
+      background-color: #e6f4ea;
+      opacity: 1;
+    }
+    .copy-code-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+
   </style>
 </head>
 <body>
@@ -1312,6 +1369,80 @@ export const A2UIRenderer: FC&lt;Props&gt; = ({ messages, onAction }) =&gt; {
   <script src="https://storage.googleapis.com/claat-public/prettify.js"></script>
   <script src="https://storage.googleapis.com/claat-public/codelab-elements.js"></script>
   <script src="//support.google.com/inapp/api.js"></script>
+
+
+  <script>
+    function setupCopyButtons() {
+      document.querySelectorAll('pre').forEach(function(pre) {
+        if (pre.closest('.code-wrapper') || pre.querySelector('.copy-code-btn')) return;
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'code-wrapper';
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-code-btn';
+        copyBtn.type = 'button';
+        copyBtn.setAttribute('aria-label', 'Copy code snippet');
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg><span>Copy</span>';
+
+        copyBtn.addEventListener('click', function() {
+          var code = pre.querySelector('code') || pre;
+          var textToCopy = (code.innerText || code.textContent || '').replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
+
+          function showSuccess() {
+            copyBtn.classList.add('copied');
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span>Copied!</span>';
+            setTimeout(function() {
+              copyBtn.classList.remove('copied');
+              copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg><span>Copy</span>';
+            }, 2000);
+          }
+
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(textToCopy).then(showSuccess).catch(function() {
+              fallbackCopy(textToCopy, showSuccess);
+            });
+          } else {
+            fallbackCopy(textToCopy, showSuccess);
+          }
+        });
+
+        wrapper.appendChild(copyBtn);
+      });
+    }
+
+    function fallbackCopy(text, cb) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        cb();
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupCopyButtons);
+    } else {
+      setupCopyButtons();
+    }
+    window.addEventListener('load', setupCopyButtons);
+    document.addEventListener('google-codelab-ready', setupCopyButtons);
+    window.addEventListener('hashchange', function() {
+      setTimeout(setupCopyButtons, 50);
+    });
+  </script>
 
 </body>
 </html>

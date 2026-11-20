@@ -17,6 +17,63 @@
     .error {
       color: red;
     }
+  
+    .code-wrapper {
+      position: relative;
+      margin: 16px 0;
+    }
+    .code-wrapper > pre {
+      margin: 0 !important;
+    }
+    .copy-code-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 9px;
+      font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1;
+      color: #5f6368;
+      background-color: #ffffff;
+      border: 1px solid #dadce0;
+      border-radius: 4px;
+      cursor: pointer;
+      box-shadow: 0 1px 2px rgba(60,64,67,0.15);
+      transition: all 0.15s ease-in-out;
+      z-index: 10;
+      opacity: 0.85;
+      user-select: none;
+    }
+    .code-wrapper:hover .copy-code-btn {
+      opacity: 1;
+    }
+    .copy-code-btn:hover {
+      background-color: #f8f9fa;
+      color: #202124;
+      border-color: #bdc1c6;
+      box-shadow: 0 1px 3px rgba(60,64,67,0.25);
+    }
+    .copy-code-btn:active {
+      background-color: #e8eaed;
+      box-shadow: none;
+    }
+    .copy-code-btn.copied {
+      color: #1e8e3e;
+      border-color: #1e8e3e;
+      background-color: #e6f4ea;
+      opacity: 1;
+    }
+    .copy-code-btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+      flex-shrink: 0;
+    }
+
   </style>
 </head>
 <body>
@@ -118,30 +175,34 @@ source .venv/bin/activate
 pip install --upgrade pip
 pip install google-adk a2ui-agent-sdk a2ui-adk
 </code></pre>
-<h2 is-upgraded>2.5 Configure Google AI Studio API Credentials</h2>
-<p>To call Gemini, obtain an API key from Google AI Studio tied to the same Google Cloud Project:</p>
+<h2 is-upgraded>2.5 Open Google Cloud Shell Editor</h2>
+<p>To easily explore and edit files throughout this codelab, open the Cloud Shell built-in code editor:</p>
 <ol type="1">
-<li>Copy the example environment configuration: <pre><code language="language-bash" class="language-bash">cp recipe_agent/.env.example recipe_agent/.env
-</code></pre>
-</li>
-<li><strong>Obtain your Gemini API Key</strong>: <ul>
+<li>In the upper-right toolbar of Cloud Shell, click <strong>Open Editor</strong> (the pencil icon):<em>Screenshot: </em><a href="https://cloud.google.com/static/shell/docs/images/open-editor.png" target="_blank"><em>Cloud Shell Editor Button</em></a></li>
+<li>The browser-based Cloud Shell Editor (based on VS Code / Theia) will open in a split pane above the terminal.</li>
+<li>In the left file explorer sidebar, expand the <code>a2uirecipe</code> directory to inspect the project layout, source code, and configuration files.</li>
+</ol>
+<h2 is-upgraded>2.6 Create and Configure <code>.env</code> in Cloud Shell Editor</h2>
+<p>To call Gemini, obtain an API key from Google AI Studio and configure your environment file directly in Cloud Shell Editor:</p>
+<ol type="1">
+<li><strong>Obtain your Gemini API Key</strong>:<ul>
 <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio Get API Key</a>.</li>
 <li>Click <strong>Create API key</strong>.</li>
 <li>When prompted to choose a project, click <strong>Select existing project</strong> and pick the <strong>same Google Cloud Project</strong> you selected in Step 2.1.</li>
 <li>Click <strong>Create API key in existing project</strong> and copy the generated key.</li>
 </ul>
 </li>
-<li>Open <code>recipe_agent/.env</code> and paste your API key: <pre><code language="language-bash" class="language-bash">GEMINI_API_KEY=your_actual_gemini_api_key_here
+<li><strong>Create </strong><strong><code>.env</code></strong><strong> in Cloud Shell Editor</strong>:<ul>
+<li>In the Cloud Shell Editor file explorer sidebar, expand <code>a2uirecipe</code> &gt; <code>recipe_agent</code>.</li>
+<li>Right-click the <code>recipe_agent</code> folder and select <strong>New File</strong>.</li>
+<li>Type <code>.env</code> as the file name and press <strong>Enter</strong> (ensure the leading dot is included).</li>
+<li><em>(Alternative)</em>: You can also open <code>recipe_agent/.env.example</code> in the editor, select <strong>File &gt; Save As...</strong>, and save it as <code>recipe_agent/.env</code>.</li>
+</ul>
+</li>
+<li><strong>Paste your API credentials</strong>: In the editor, paste the following into your newly created <code>recipe_agent/.env</code>:<pre><code language="language-bash" class="language-bash">GEMINI_API_KEY=your_actual_gemini_api_key_here
 RECIPE_STAGE=1
 </code></pre>
-</li>
-</ol>
-<h2 is-upgraded>2.6 Open Google Cloud Shell Editor</h2>
-<p>To easily explore and edit files throughout this codelab, open the Cloud Shell built-in code editor:</p>
-<ol type="1">
-<li>In the upper-right toolbar of Cloud Shell, click <strong>Open Editor</strong> (the pencil icon):<em>Screenshot: </em><a href="https://cloud.google.com/static/shell/docs/images/open-editor.png" target="_blank"><em>Cloud Shell Editor Button</em></a></li>
-<li>The browser-based Cloud Shell Editor (based on VS Code / Theia) will open in a split pane above the terminal.</li>
-<li>In the left file explorer sidebar, expand the <code>a2uirecipe</code> directory to inspect the project layout, source code, and configuration files.</li>
+Replace <code>your_actual_gemini_api_key_here</code> with your copied Gemini API key and save the file (<strong>Ctrl+S</strong> or <strong>Cmd+S</strong>).</li>
 </ol>
 
 
@@ -1266,6 +1327,80 @@ npm run build
   <script src="https://storage.googleapis.com/claat-public/prettify.js"></script>
   <script src="https://storage.googleapis.com/claat-public/codelab-elements.js"></script>
   <script src="//support.google.com/inapp/api.js"></script>
+
+
+  <script>
+    function setupCopyButtons() {
+      document.querySelectorAll('pre').forEach(function(pre) {
+        if (pre.closest('.code-wrapper') || pre.querySelector('.copy-code-btn')) return;
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'code-wrapper';
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(pre);
+
+        var copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-code-btn';
+        copyBtn.type = 'button';
+        copyBtn.setAttribute('aria-label', 'Copy code snippet');
+        copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg><span>Copy</span>';
+
+        copyBtn.addEventListener('click', function() {
+          var code = pre.querySelector('code') || pre;
+          var textToCopy = (code.innerText || code.textContent || '').replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
+
+          function showSuccess() {
+            copyBtn.classList.add('copied');
+            copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg><span>Copied!</span>';
+            setTimeout(function() {
+              copyBtn.classList.remove('copied');
+              copyBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg><span>Copy</span>';
+            }, 2000);
+          }
+
+          if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(textToCopy).then(showSuccess).catch(function() {
+              fallbackCopy(textToCopy, showSuccess);
+            });
+          } else {
+            fallbackCopy(textToCopy, showSuccess);
+          }
+        });
+
+        wrapper.appendChild(copyBtn);
+      });
+    }
+
+    function fallbackCopy(text, cb) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      try {
+        document.execCommand('copy');
+        cb();
+      } catch (err) {
+        console.error('Fallback copy failed', err);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupCopyButtons);
+    } else {
+      setupCopyButtons();
+    }
+    window.addEventListener('load', setupCopyButtons);
+    document.addEventListener('google-codelab-ready', setupCopyButtons);
+    window.addEventListener('hashchange', function() {
+      setTimeout(setupCopyButtons, 50);
+    });
+  </script>
 
 </body>
 </html>

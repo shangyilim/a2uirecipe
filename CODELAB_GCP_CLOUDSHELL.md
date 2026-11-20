@@ -103,25 +103,7 @@ pip install --upgrade pip
 pip install google-adk a2ui-agent-sdk a2ui-adk
 ```
 
-### 2.5 Configure Google AI Studio API Credentials
-To call Gemini, obtain an API key from Google AI Studio tied to the same Google Cloud Project:
-
-1. Copy the example environment configuration:
-   ```bash
-   cp recipe_agent/.env.example recipe_agent/.env
-   ```
-2. **Obtain your Gemini API Key**:
-   - Go to [Google AI Studio Get API Key](https://aistudio.google.com/app/apikey).
-   - Click **Create API key**.
-   - When prompted to choose a project, click **Select existing project** and pick the **same Google Cloud Project** you selected in Step 2.1.
-   - Click **Create API key in existing project** and copy the generated key.
-3. Open `recipe_agent/.env` and paste your API key:
-   ```bash
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
-   RECIPE_STAGE=1
-   ```
-
-### 2.6 Open Google Cloud Shell Editor
+### 2.5 Open Google Cloud Shell Editor
 To easily explore and edit files throughout this codelab, open the Cloud Shell built-in code editor:
 
 1. In the upper-right toolbar of Cloud Shell, click **Open Editor** (the pencil icon):
@@ -130,6 +112,29 @@ To easily explore and edit files throughout this codelab, open the Cloud Shell b
 
 2. The browser-based Cloud Shell Editor (based on VS Code / Theia) will open in a split pane above the terminal.
 3. In the left file explorer sidebar, expand the `a2uirecipe` directory to inspect the project layout, source code, and configuration files.
+
+### 2.6 Create and Configure `.env` in Cloud Shell Editor
+To call Gemini, obtain an API key from Google AI Studio and configure your environment file directly in Cloud Shell Editor:
+
+1. **Obtain your Gemini API Key**:
+   - Go to [Google AI Studio Get API Key](https://aistudio.google.com/app/apikey).
+   - Click **Create API key**.
+   - When prompted to choose a project, click **Select existing project** and pick the **same Google Cloud Project** you selected in Step 2.1.
+   - Click **Create API key in existing project** and copy the generated key.
+
+2. **Create `.env` in Cloud Shell Editor**:
+   - In the Cloud Shell Editor file explorer sidebar, expand `a2uirecipe` > `recipe_agent`.
+   - Right-click the `recipe_agent` folder and select **New File**.
+   - Type `.env` as the file name and press **Enter** (ensure the leading dot is included).
+   - *(Alternative)*: You can also open `recipe_agent/.env.example` in the editor, select **File > Save As...**, and save it as `recipe_agent/.env`.
+
+3. **Paste your API credentials**:
+   In the editor, paste the following into your newly created `recipe_agent/.env`:
+   ```bash
+   GEMINI_API_KEY=your_actual_gemini_api_key_here
+   RECIPE_STAGE=1
+   ```
+   Replace `your_actual_gemini_api_key_here` with your copied Gemini API key and save the file (**Ctrl+S** or **Cmd+S**).
 
 ---
 
