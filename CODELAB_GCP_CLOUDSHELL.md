@@ -65,9 +65,18 @@ A **Recipe Assistant** built through four progressive stages:
 
 **Google Cloud Shell** is a browser-based computing environment pre-authenticated with your Google Cloud account. It comes pre-installed with `gcloud`, `git`, `python3`, `node`, and `npm`.
 
-### 2.1 Select Your Google Cloud Project and Open Cloud Shell
+### 2.1 Prerequisite: Create a Project and API Key via Google AI Studio
+Before launching Cloud Shell, create your project and Gemini API key directly from Google AI Studio:
+
+1. Navigate to [Google AI Studio Get API Key](https://aistudio.google.com/app/apikey).
+2. Click the **Create API key** button.
+3. In the dialog, select **Create API key in new project**. Google AI Studio will automatically provision a new Google Cloud project for you and create an API key enabled for the Generative Language API.
+4. Copy the generated API key (you will paste it into your `.env` file in Step 2.7).
+5. Note down the name or **Project ID** of the newly created project (displayed in the API keys table).
+
+### 2.2 Select Your Google Cloud Project and Open Cloud Shell
 1. Navigate to the [Google Cloud Console](https://console.cloud.google.com/).
-2. In the top navigation bar, click the **Project drop-down** and select (or create) the Google Cloud Project you will use for this codelab. Note down your **Project ID**.
+2. In the top navigation bar, click the **Project drop-down** and select the Google Cloud project created by Google AI Studio in Step 2.1. Note down your **Project ID**.
 3. Click the **Activate Cloud Shell** icon (`>_`) in the upper-right corner of the console toolbar:
 
 ![Google Cloud Shell](https://cloud.google.com/static/shell/docs/images/cloud-shell-toolbar.png)
@@ -78,7 +87,7 @@ A **Recipe Assistant** built through four progressive stages:
    ```
    *(Replace `YOUR_PROJECT_ID` with your actual Project ID).*
 
-### 2.2 Verify Installed Tooling
+### 2.3 Verify Installed Tooling
 Run the following in Cloud Shell to verify Python and Node versions:
 ```bash
 python3 --version   # Python 3.10+ (or 3.11/3.12)
@@ -86,7 +95,7 @@ node --version      # v18+ or v20+
 npm --version
 ```
 
-### 2.3 Clone or Navigate to the Codebase
+### 2.4 Clone or Navigate to the Codebase
 If cloning from your git repository in Cloud Shell, checkout the starter `stage0` branch:
 ```bash
 git clone https://github.com/shangyilim/a2uirecipe.git
@@ -94,7 +103,7 @@ cd a2uirecipe
 git checkout stage0
 ```
 
-### 2.4 Set Up Python Virtual Environment
+### 2.5 Set Up Python Virtual Environment
 Cloud Shell manages packages best within a virtual environment. Create and activate `.venv`:
 ```bash
 python3 -m venv .venv
@@ -103,7 +112,7 @@ pip install --upgrade pip
 pip install google-adk a2ui-agent-sdk a2ui-adk
 ```
 
-### 2.5 Open Google Cloud Shell Editor
+### 2.6 Open Google Cloud Shell Editor
 To easily explore and edit files throughout this codelab, open the Cloud Shell built-in code editor:
 
 1. In the upper-right toolbar of Cloud Shell, click **Open Editor** (the pencil icon):
@@ -113,29 +122,22 @@ To easily explore and edit files throughout this codelab, open the Cloud Shell b
 2. The browser-based Cloud Shell Editor (based on VS Code / Theia) will open in a split pane above the terminal.
 3. In the left file explorer sidebar, expand the `a2uirecipe` directory to inspect the project layout, source code, and configuration files.
 
-### 2.6 Create and Configure `.env` in Cloud Shell Editor
-To call Gemini, generate an API key using `gcloud` and configure your environment file directly in Cloud Shell Editor:
+### 2.7 Create and Configure `.env` in Cloud Shell Editor
+Configure your environment file directly in Cloud Shell Editor using the Gemini API key created in Step 2.1:
 
-1. **Generate your Gemini API Key**:
-   Run the following command in the Cloud Shell terminal:
-   ```bash
-   gcloud services api-keys create --display-name="Gemini API Key" --api-target=service=generativelanguage.googleapis.com --format="value(response.keyString)"
-   ```
-   Copy the generated API key string from the command output.
-
-2. **Create `.env` in Cloud Shell Editor**:
+1. **Create `.env` in Cloud Shell Editor**:
    - In the Cloud Shell Editor file explorer sidebar, expand `a2uirecipe` > `recipe_agent`.
    - Right-click the `recipe_agent` folder and select **New File**.
    - Type `.env` as the file name and press **Enter** (ensure the leading dot is included).
    - *(Alternative)*: You can also open `recipe_agent/.env.example` in the editor, select **File > Save As...**, and save it as `recipe_agent/.env`.
 
-3. **Paste your API credentials**:
+2. **Paste your API credentials**:
    In the editor, paste the following into your newly created `recipe_agent/.env`:
    ```bash
    GEMINI_API_KEY=your_actual_gemini_api_key_here
    RECIPE_STAGE=1
    ```
-   Replace `your_actual_gemini_api_key_here` with your copied Gemini API key and save the file (**Ctrl+S** or **Cmd+S**).
+   Replace `your_actual_gemini_api_key_here` with your copied Gemini API key from Step 2.1 and save the file (**Ctrl+S** or **Cmd+S**).
 
 ---
 
@@ -590,7 +592,7 @@ If you want to understand how the client-side Default Renderer is put together, 
    - Per the [A2UI Theming & Styling Guide](https://a2ui.org/guides/theming), defines `--a2ui-*` CSS Custom Properties scoped to `.a2ui-default-surface` (primary Emerald buttons, Slate typography, rounded cards, and spacing) so standard primitives match the application's theme.
 3. **`frontend/src/services/adkService.ts` & `frontend/src/App.tsx`**:
    - `adkService.ts` extracts `part.functionResponse.response.validated_a2ui_json` emitted by `SendA2uiToClientToolset` (with `<a2ui-json>` / raw JSON block fallback) and preserves `rawMessages` alongside `surfaceState`.
-   - `App.tsx` provides a header toggle (**`Default (@a2ui/react)`** vs. **`Custom Catalog`**) and renders `<DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} />` when Default mode is active.
+   - `App.tsx` provides a header toggle (**`Plain Text`**, **`Default (@a2ui/react)`**, and **`Custom Catalog`**) and renders `<DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} />` when Default mode is active.
 
 #### Test the Default Renderer & Understand Why to Switch to Custom UI Components
 1. Open **two Cloud Shell terminal tabs** (click **`+`** on the terminal bar):

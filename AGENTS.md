@@ -106,19 +106,25 @@ All **v0.8 and v0.9 legacy code has been removed** from `frontend/src/`.
 - Wraps custom React components (`RecipeSummaryCard`, `RecipeDetailCard`, `GuidedCookingCard`, `DefaultCard`) via `createComponentImplementation(...)` and forwards user actions through `context.dispatchAction({ event: { name, context } })`.
 - Derives `culinaryCatalog` using `basicCatalog.derive({ catalogId: CULINARY_CATALOG_ID, components: [...basicCatalog.components.values(), ...] })`.
 
-### Dual Renderer Modes & Strict Catalog Isolation (`App.tsx`, `A2UIRenderer.tsx`, `DefaultA2UIRenderer.tsx`)
-`App.tsx` includes a header toggle (`rendererMode`: `'custom'` vs `'default'`) and passes only `messages={msg.rawMessages}` and `onAction={handleAction}` to whichever renderer is active (one isolated `MessageProcessor` per chat bubble):
+### Renderer Modes & Strict Catalog Isolation (`App.tsx`, `A2UIRenderer.tsx`, `DefaultA2UIRenderer.tsx`)
+`App.tsx` includes a three-way header toggle (`rendererMode`: `'plain'` vs `'default'` vs `'custom'`) to demonstrate each stage of the culinary codelab progression:
 
-1. **Custom Catalog Mode — `frontend/src/components/A2UIRenderer.tsx`**
-   - Calls `injectBasicCatalogStyles()` and instantiates `new MessageProcessor([culinaryCatalog])` (**does NOT include `basicCatalog`**).
-   - **Strict rejection on catalog mismatch**: If `messages` contains `createSurface.catalogId === basicCatalog.id`, or if `MessageProcessor([culinaryCatalog])` throws/fails to build a surface, `A2UIRenderer` sets `catalogError` and renders a red **`Catalog Mismatch Error`** alert (`role="alert"`) instead of falling back.
-   - **Why `basicCatalog` and manual `renderComponent` fallback were removed:** Including `basicCatalog` in `A2UIRenderer` would silently render Stage 3 payloads and hide catalog mismatches. Meanwhile, the legacy `renderComponent` fallback (including invalid v1.0 `Text` variants like `h1`/`h2`/`h3`/`badge`, which A2UI v1.0 restricts to `"caption" | "body"`) became dead code once `<A2uiSurface />` handled all `culinaryCatalog` and derived `basicCatalog` primitives natively.
+1. **Plain Text Mode (`plain`)**
+   - Strictly Stage 1 interaction.
+   - Suppresses A2UI surface rendering; renders plain text and markdown messages directly via `MarkdownRenderer`.
+   - If an agent turn returned an A2UI tool response without conversation text (`!msg.text && msg.rawMessages`), displays an inspection block with the raw formatted A2UI JSON payload.
 
-2. **Default Renderer Mode — `frontend/src/components/DefaultA2UIRenderer.tsx`**
+2. **Default Renderer Mode (`default`) — `frontend/src/components/DefaultA2UIRenderer.tsx`**
    - Strictly Stage 3 (`BasicCatalog` only).
    - Calls `injectBasicCatalogStyles()` and uses `new MessageProcessor([basicCatalog])` + `<A2uiSurface />` styled via `--a2ui-*` CSS custom properties in `frontend/src/index.css` (`.a2ui-default-surface`).
    - If toggled onto a Stage 4 custom-catalog payload (`surfaces.length === 0`), displays an amber notice telling the user to switch the header toggle back to **Custom Catalog**.
    - **Why `adaptCustomCatalogIfNeeded` / `customToBasicAdapter.ts` was removed:** A2UI catalog schemas define component prop contracts, not client-side fallback layouts. Maintaining a client translator from custom cards to `BasicCatalog` primitives defeated the clean separation between Stage 3 (`DefaultA2UIRenderer`, `BasicCatalog` only) and Stage 4 (`A2UIRenderer`, `culinaryCatalog`).
+
+3. **Custom Catalog Mode (`custom`) — `frontend/src/components/A2UIRenderer.tsx`**
+   - Strictly Stage 4 (`culinaryCatalog` only).
+   - Calls `injectBasicCatalogStyles()` and instantiates `new MessageProcessor([culinaryCatalog])` (**does NOT include `basicCatalog`**).
+   - **Strict rejection on catalog mismatch**: If `messages` contains `createSurface.catalogId === basicCatalog.id`, or if `MessageProcessor([culinaryCatalog])` throws/fails to build a surface, `A2UIRenderer` sets `catalogError` and renders a red **`Catalog Mismatch Error`** alert (`role="alert"`) instead of falling back.
+   - **Why `basicCatalog` and manual `renderComponent` fallback were removed:** Including `basicCatalog` in `A2UIRenderer` would silently render Stage 3 payloads and hide catalog mismatches. Meanwhile, the legacy `renderComponent` fallback (including invalid v1.0 `Text` variants like `h1`/`h2`/`h3`/`badge`, which A2UI v1.0 restricts to `"caption" | "body"`) became dead code once `<A2uiSurface />` handled all `culinaryCatalog` and derived `basicCatalog` primitives natively.
 
 ### Custom Domain Components (`frontend/src/components/`) & Action Loop (`App.tsx`)
 - `RecipeSummaryCard.tsx`: Discovery card with dish image, timing/calorie metadata, and **View** (`view_recipe`) / **Let's Cook This** (`start_cooking`) buttons.

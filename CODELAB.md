@@ -116,7 +116,7 @@ pip install google-adk a2ui-agent-sdk a2ui-adk
 2. **Obtain your Gemini API Key**:
    - Go to [Google AI Studio Get API Key](https://aistudio.google.com/app/apikey).
    - Click **Create API key**.
-   - If prompted, select your active Google Cloud project so the key is associated with it.
+   - Select **Create API key in new project** (or pick an existing Google Cloud project).
    - Copy the generated key.
 3. Open `recipe_agent/.env` and set your API key:
    ```bash
@@ -616,7 +616,7 @@ If you want to understand how the client-side Default Renderer is put together, 
    - Per the [A2UI Theming & Styling Guide](https://a2ui.org/guides/theming), defines `--a2ui-*` CSS Custom Properties scoped to `.a2ui-default-surface` (primary Emerald buttons, Slate typography, rounded cards, and spacing) so standard primitives match the application's theme.
 3. **`frontend/src/services/adkService.ts` & `frontend/src/App.tsx`**:
    - `adkService.ts` extracts `part.functionResponse.response.validated_a2ui_json` emitted by `SendA2uiToClientToolset` (with `<a2ui-json>` / raw JSON block fallback) and preserves `rawMessages` alongside `surfaceState`.
-   - `App.tsx` provides a header toggle (**`Default (@a2ui/react)`** vs. **`Custom Catalog`**) and renders `<DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} />` when Default mode is active.
+   - `App.tsx` provides a header toggle (**`Plain Text`**, **`Default (@a2ui/react)`**, and **`Custom Catalog`**) and renders `<DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} />` when Default mode is active.
 
 #### Test the Default Renderer & Understand Why to Switch to Custom UI Components
 1. Open two terminals to start the backend and frontend:
