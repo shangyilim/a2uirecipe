@@ -3,13 +3,13 @@
   "format": "html",
   "prefix": "https://storage.googleapis.com",
   "mainga": "UA-49880327-14",
-  "updated": "2026-11-20T22:12:14+07:00",
+  "updated": "2026-11-26T15:20:17+08:00",
   "id": "a2ui-recipe-codelab",
   "duration": 51,
   "title": "Codelab: Interactive Recipe Experiences with ADK and A2UI",
   "authors": "Shang Yi",
   "summary": "Build an interactive AI culinary recipe assistant with Google ADK and A2UI v1.0, progressing from plain text to BasicCatalog rendering and a formal Custom Culinary Catalog.",
-  "source": "/var/folders/rh/cmbnxchn18j851735kgkcm_w0000gn/T/tmp0wv5easz/a2ui-recipe-codelab.md",
+  "source": "/var/folders/rh/cmbnxchn18j851735kgkcm_w0000gn/T/tmp_eda4c1r/a2ui-recipe-codelab.md",
   "theme": "",
   "status": [
     "published"

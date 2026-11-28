@@ -191,7 +191,7 @@ pip install google-adk a2ui-agent-sdk a2ui-adk
 <li><strong>Obtain your Gemini API Key</strong>: <ul>
 <li>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio Get API Key</a>.</li>
 <li>Click <strong>Create API key</strong>.</li>
-<li>If prompted, select your active Google Cloud project so the key is associated with it.</li>
+<li>Select <strong>Create API key in new project</strong> (or pick an existing Google Cloud project).</li>
 <li>Copy the generated key.</li>
 </ul>
 </li>
@@ -676,7 +676,7 @@ root_agent = Agent(
 </li>
 <li><strong><code>frontend/src/services/adkService.ts</code></strong><strong> &amp; </strong><strong><code>frontend/src/App.tsx</code></strong>: <ul>
 <li><code>adkService.ts</code> extracts <code>part.functionResponse.response.validated_a2ui_json</code> emitted by <code>SendA2uiToClientToolset</code> (with <code><a2ui-json></code> / raw JSON block fallback) and preserves <code>rawMessages</code> alongside <code>surfaceState</code>.</li>
-<li><code>App.tsx</code> provides a header toggle (<strong><code>Default (@a2ui/react)</code></strong> vs. <strong><code>Custom Catalog</code></strong>) and renders <code><DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} /></code> when Default mode is active.</li>
+<li><code>App.tsx</code> provides a header toggle (<strong><code>Plain Text</code></strong>, <strong><code>Default (@a2ui/react)</code></strong>, and <strong><code>Custom Catalog</code></strong>) and renders <code><DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} /></code> when Default mode is active.</li>
 </ul>
 </li>
 </ol>

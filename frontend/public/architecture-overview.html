@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Overview: How A2UI Works in Culinary Recipe Assistant | A2UI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,600;0,700;1,400&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --sl-font-sans: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --sl-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      --sl-color-bg: #090d16;
+      --sl-color-bg-sidebar: #0c121e;
+      --sl-color-hairline: #1e293b;
+      --sl-color-gray-1: #e2e8f0;
+      --sl-color-gray-2: #94a3b8;
+      --sl-color-gray-3: #64748b;
+      --sl-color-gray-4: #334155;
+      --sl-color-white: #f8fafc;
+      --sl-color-text-accent: #14b8a6;
+      --sl-color-accent: #6366f1;
+    }
+
+    :root[data-theme="light"] {
+      --sl-color-bg: #ffffff;
+      --sl-color-bg-sidebar: #f8fafc;
+      --sl-color-hairline: #e2e8f0;
+      --sl-color-gray-1: #0f172a;
+      --sl-color-gray-2: #334155;
+      --sl-color-gray-3: #475569;
+      --sl-color-gray-4: #cbd5e1;
+      --sl-color-white: #0f172a;
+      --sl-color-text-accent: #0d9488;
+      --sl-color-accent: #4f46e5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--sl-font-sans);
+      background-color: var(--sl-color-bg);
+      color: var(--sl-color-gray-1);
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    header.doc-header {
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid var(--sl-color-hairline);
+      padding-bottom: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .brand-badge {
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      background: #14b8a620;
+      color: var(--sl-color-text-accent);
+      border: 1px solid rgba(20, 184, 166, 0.4);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .theme-toggle {
+      background: var(--sl-color-bg-sidebar);
+      border: 1px solid var(--sl-color-hairline);
+      color: var(--sl-color-gray-2);
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      font-family: var(--sl-font-mono);
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .theme-toggle:hover { color: var(--sl-color-white); }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: var(--sl-color-white);
+      letter-spacing: -0.025em;
+    }
+
+    p.lead {
+      font-size: 1.125rem;
+      color: var(--sl-color-gray-2);
+      max-width: 760px;
+    }
+
+    h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--sl-color-white);
+      margin: 2.5rem 0 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    p { margin-bottom: 1rem; color: var(--sl-color-gray-2); }
+    strong { color: var(--sl-color-white); }
+    code {
+      font-family: var(--sl-font-mono);
+      font-size: 0.85em;
+      padding: 0.15em 0.35em;
+      border-radius: 4px;
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--sl-color-text-accent);
+    }
+
+    /* Pipeline Architecture Styles */
+    .diagram-card {
+      border: 1px solid var(--sl-color-hairline);
+      border-radius: 16px;
+      background: var(--sl-color-bg-sidebar);
+      padding: 1.25rem;
+      margin: 2rem 0;
+      box-shadow: 0 10px 30px -10px rgba(0,0,0,0.4);
+    }
+
+    .diagram-title {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--sl-color-white);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .diagram-tag {
+      font-family: var(--sl-font-mono);
+      font-size: 0.7rem;
+      color: var(--sl-color-gray-3);
+      font-weight: 500;
+    }
+
+    .a2-pipeline-root {
+      display: flex;
+      flex-direction: column;
+      gap: 0.85rem;
+      font-size: 0.85rem;
+      line-height: 1.45;
+    }
+
+    .a2-side {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      padding: 1rem;
+      border-radius: 12px;
+      border: 1px solid var(--sl-color-hairline);
+      background: var(--sl-color-bg);
+    }
+
+    .a2-side-header { display: flex; }
+    .a2-side-badge {
+      font-family: var(--sl-font-mono);
+      font-weight: 700;
+      font-size: 0.72rem;
+      letter-spacing: 0.05em;
+      padding: 0.2rem 0.65rem;
+      border-radius: 9999px;
+    }
+    .a2-badge-server {
+      background: #a855f724;
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+    }
+    .a2-badge-client {
+      background: #3b82f624;
+      color: #60a5fa;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+
+    .a2-two-col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 0.65rem;
+    }
+
+    .a2-card {
+      background: var(--sl-color-bg-sidebar);
+      border: 1px solid var(--sl-color-hairline);
+      border-radius: 8px;
+      padding: 0.75rem;
+      min-width: 0;
+    }
+    .a2-card-tag {
+      font-family: var(--sl-font-mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--sl-color-gray-3);
+    }
+    .a2-card-title {
+      font-weight: 700;
+      font-size: 0.875rem;
+      color: var(--sl-color-white);
+      margin-top: 0.15rem;
+    }
+    .a2-card-desc {
+      margin: 0.25rem 0 0;
+      font-size: 0.775rem;
+      color: var(--sl-color-gray-2);
+    }
+
+    .a2-sdk-boundary {
+      border: 2px dashed rgba(20, 184, 166, 0.5);
+      background: rgba(20, 184, 166, 0.05);
+      border-radius: 10px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .a2-boundary-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.25rem 0.75rem;
+    }
+    .a2-boundary-label {
+      font-family: var(--sl-font-mono);
+      font-weight: 800;
+      font-size: 0.75rem;
+      letter-spacing: 0.04em;
+      color: var(--sl-color-text-accent);
+    }
+    .a2-boundary-langs {
+      font-family: var(--sl-font-mono);
+      font-size: 0.68rem;
+      color: var(--sl-color-gray-3);
+    }
+
+    .a2-flow-row { margin: -0.2rem 0; }
+    .a2-flow-label {
+      text-align: center;
+      font-family: var(--sl-font-mono);
+      font-size: 0.7rem;
+      color: var(--sl-color-gray-3);
+    }
+
+    .a2-agent-box {
+      background: var(--sl-color-bg-sidebar);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      border-radius: 10px;
+      padding: 0.75rem;
+    }
+    .a2-agent-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem 0.75rem;
+    }
+    .a2-agent-title {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: #c084fc;
+    }
+    .a2-agent-pill {
+      font-family: var(--sl-font-mono);
+      font-size: 0.65rem;
+      white-space: nowrap;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      background: #a855f726;
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    /* Transport styles */
+    .a2-transport {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 0.5rem;
+      border-left: 2px dotted var(--sl-color-gray-4);
+      border-right: 2px dotted var(--sl-color-gray-4);
+      margin: 0 auto;
+      width: min(100%, 34rem);
+    }
+    .a2-transport-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: var(--sl-font-mono);
+      text-align: center;
+    }
+    .a2-transport-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: var(--sl-color-gray-2);
+    }
+    .a2-transport-names {
+      font-size: 0.68rem;
+      color: var(--sl-color-gray-3);
+    }
+    .a2-transport-chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    .a2-chip {
+      font-family: var(--sl-font-mono);
+      font-size: 0.72rem;
+      white-space: nowrap;
+      padding: 0.2rem 0.55rem;
+      border-radius: 6px;
+      background: var(--sl-color-bg);
+      border: 1px solid var(--sl-color-hairline);
+    }
+    .a2-chip-layout { color: var(--sl-color-text-accent); }
+    .a2-chip-data { color: #d97706; }
+    .a2-chip-action { color: #3b82f6; }
+
+    /* Client Grid & Phone Mockup */
+    .a2-client-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+    @media (min-width: 680px) {
+      .a2-client-grid {
+        grid-template-columns: 19rem 1fr;
+      }
+    }
+
+    .a2-device-figure {
+      margin: 0 auto;
+      width: 100%;
+      max-width: 19rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .a2-device {
+      width: 100%;
+      padding: 8px;
+      border-radius: 36px;
+      background: #111318;
+      box-shadow: 0 0 0 1px #3f4552, 0 20px 40px -15px #000000c0;
+    }
+    .a2-device-screen {
+      position: relative;
+      border-radius: 28px;
+      overflow: hidden;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 0.65rem 0.65rem 0.6rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .a2-device-island {
+      position: absolute;
+      top: 0.45rem;
+      left: 50%;
+      transform: translate(-50%);
+      width: 4.5rem;
+      height: 1.1rem;
+      border-radius: 9999px;
+      background: #000;
+    }
+    .a2-device-status {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0 0.6rem;
+      min-height: 1.1rem;
+    }
+    .a2-app-bar {
+      font-weight: 700;
+      font-size: 0.85rem;
+      text-align: center;
+      padding-bottom: 0.35rem;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .a2-app-mode-pill {
+      font-size: 0.58rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 9999px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      font-family: var(--sl-font-mono);
+    }
+    .a2-chat {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .a2-bubble {
+      font-size: 0.72rem;
+      line-height: 1.35;
+      padding: 0.45rem 0.65rem;
+      border-radius: 14px;
+      max-width: 90%;
+    }
+    .a2-bubble-user {
+      align-self: flex-end;
+      background: #2563eb;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .a2-bubble-agent {
+      align-self: flex-start;
+      background: #1e293b;
+      color: #e2e8f0;
+      border-bottom-left-radius: 4px;
+    }
+
+    /* Culinary Surface Styling */
+    .a2-surface {
+      position: relative;
+      margin-top: 0.25rem;
+      padding: 0.85rem 0.5rem 0.5rem;
+      border: 2px dashed rgba(20, 184, 166, 0.75);
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      background: rgba(15, 23, 42, 0.7);
+    }
+    .a2-surface-tag {
+      position: absolute;
+      top: -0.6rem;
+      left: 0.6rem;
+      font-family: var(--sl-font-mono);
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      padding: 0.05rem 0.4rem;
+      border-radius: 4px;
+      background: #0d9488;
+      color: #fff;
+    }
+
+    .culinary-card-mockup {
+      background: #1e293b;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      flex-direction: column;
+    }
+    .culinary-card-img {
+      width: 100%;
+      height: 90px;
+      background: #334155 url('/images/carbonara.jpg') center/cover no-repeat;
+      position: relative;
+    }
+    .culinary-card-img-placeholder {
+      width: 100%;
+      height: 90px;
+      background: linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #b45309 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+    }
+    .culinary-badge {
+      position: absolute;
+      top: 0.4rem;
+      right: 0.4rem;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(4px);
+      color: #fbbf24;
+      font-size: 0.58rem;
+      font-weight: 700;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      border: 1px solid rgba(251, 191, 36, 0.4);
+    }
+    .culinary-content {
+      padding: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .culinary-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #f8fafc;
+      line-height: 1.2;
+    }
+    .culinary-meta {
+      font-size: 0.62rem;
+      color: #94a3b8;
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .culinary-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.35rem;
+      margin-top: 0.35rem;
+    }
+    .btn-mock-view {
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-align: center;
+      padding: 0.3rem 0;
+      border-radius: 6px;
+      background: #334155;
+      color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .btn-mock-cook {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-align: center;
+      padding: 0.3rem 0;
+      border-radius: 6px;
+      background: #ea580c;
+      color: #fff;
+    }
+
+    /* Guided step timer mockup */
+    .guided-mockup {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 0.45rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      border-left: 3px solid #14b8a6;
+    }
+    .guided-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: #14b8a6;
+    }
+    .guided-text {
+      font-size: 0.66rem;
+      line-height: 1.25;
+      color: #e2e8f0;
+    }
+    .timer-strip {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 0.25rem 0.4rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid rgba(20, 184, 166, 0.3);
+    }
+    .timer-clock {
+      font-family: var(--sl-font-mono);
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #38bdf8;
+    }
+    .timer-btn {
+      font-size: 0.58rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 4px;
+      background: #0284c7;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .a2-device-home {
+      width: 5rem;
+      height: 4px;
+      margin: 0.25rem auto 0;
+      border-radius: 9999px;
+      background: #94a3b899;
+    }
+    .a2-device-caption {
+      font-family: var(--sl-font-mono);
+      font-size: 0.7rem;
+      color: var(--sl-color-gray-3);
+    }
+
+    .a2-legend {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .a2-legend-item {
+      border-radius: 10px;
+      padding: 0.75rem 0.85rem;
+    }
+    .a2-legend-app {
+      background: var(--sl-color-bg-sidebar);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+    }
+    .a2-legend-title {
+      font-weight: 700;
+      font-size: 0.875rem;
+      color: #60a5fa;
+    }
+    .a2-legend-renderer {
+      border: 2px dashed rgba(20, 184, 166, 0.6);
+      background: rgba(20, 184, 166, 0.05);
+    }
+
+    /* Code & Comparison Tabs */
+    .code-window {
+      background: #0b0f19;
+      border: 1px solid var(--sl-color-hairline);
+      border-radius: 10px;
+      overflow: hidden;
+      margin: 1.25rem 0;
+    }
+    .code-bar {
+      background: #111827;
+      padding: 0.5rem 0.85rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--sl-color-hairline);
+    }
+    .code-title {
+      font-family: var(--sl-font-mono);
+      font-size: 0.72rem;
+      color: var(--sl-color-gray-2);
+      font-weight: 600;
+    }
+    pre {
+      padding: 1rem;
+      overflow-x: auto;
+      font-family: var(--sl-font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #e2e8f0;
+    }
+    .token-kwd { color: #c084fc; font-weight: 600; }
+    .token-str { color: #86efac; }
+    .token-prop { color: #38bdf8; }
+    .token-cmt { color: #64748b; font-style: italic; }
+    .token-val { color: #fbbf24; }
+
+    /* Alert callouts */
+    .callout {
+      border-left: 4px solid var(--sl-color-text-accent);
+      background: rgba(20, 184, 166, 0.08);
+      padding: 0.85rem 1rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1.25rem 0;
+    }
+    .callout-title {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--sl-color-text-accent);
+      margin-bottom: 0.25rem;
+    }
+    .callout-body {
+      font-size: 0.8rem;
+      color: var(--sl-color-gray-2);
+    }
+
+    footer {
+      margin-top: 4rem;
+      border-top: 1px solid var(--sl-color-hairline);
+      padding-top: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+      color: var(--sl-color-gray-3);
+      font-family: var(--sl-font-mono);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    
+    <!-- PROGRESSION NAVIGATION BAR -->
+    <nav class="progression-nav" style="background: var(--sl-color-bg-sidebar); border: 1px solid var(--sl-color-hairline); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 2rem; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem;">
+      <span class="progression-nav-label" style="font-family: var(--sl-font-mono); font-size: 0.75rem; font-weight: 700; color: var(--sl-color-gray-3); text-transform: uppercase; letter-spacing: 0.05em;">Codelab Progression:</span>
+      <div class="progression-pills" style="display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem;">
+        <a href="stage1.html" class="stage-pill "><span class="pill-num">1</span> Plain Text</a> <span class="nav-arrow">➔</span> <a href="stage2.html" class="stage-pill "><span class="pill-num">2</span> Structured JSON</a> <span class="nav-arrow">➔</span> <a href="stage3.html" class="stage-pill "><span class="pill-num">3</span> Default Renderer</a> <span class="nav-arrow">➔</span> <a href="stage4.html" class="stage-pill active"><span class="pill-num">4</span> Custom Catalog</a>
+      </div>
+    </nav>
+        
+    <!-- PAGE HEADER -->
+    <header class="doc-header">
+      <div class="header-top">
+        <span class="brand-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L2 19.7778H22L12 2ZM12 6.4L18.6 17.6H5.4L12 6.4Z"/></svg>
+          A2UI v1.0 Architecture · Recipe Codelab
+        </span>
+        <button class="theme-toggle" onclick="toggleTheme()">
+          <span>☀️ / 🌙 Theme</span>
+        </button>
+      </div>
+      <h1>Overview: How A2UI Works</h1>
+      <p class="lead">
+        How our <strong>A2UI Python ADK Agent</strong>, <strong>Vite Dev Proxy</strong>, and <strong>React Culinary Renderer</strong> fit together, traced through a single culinary request.
+      </p>
+    </header>
+
+    <!-- INTRO -->
+    <section>
+      <h2>Generating UI in Our Recipe Assistant</h2>
+      <p>
+        A2UI lets our Python ADK agent describe interactive culinary interfaces as a stream of JSON messages that the React client renders with native Tailwind widgets.
+        Below is the exact architecture of our workspace (<code>recipe_agent/</code> + <code>frontend/</code>), followed by a step-by-step trace of how user prompts turn into interactive recipe summary cards, ingredient checklists, and local step timers.
+      </p>
+    </section>
+
+    <!-- ARCHITECTURE OVERVIEW CONTAINER -->
+    <div class="diagram-card">
+      <div class="diagram-title">
+        <span>A2UI Architecture &amp; Pipeline Overview</span>
+        <span class="diagram-tag">Interactive Codelab Implementation</span>
+      </div>
+
+      <div class="a2-pipeline-root">
+        <!-- ================= SERVER ================= -->
+        <section class="a2-side" aria-label="Server: Python ADK Agent">
+          <header class="a2-side-header">
+            <span class="a2-side-badge a2-badge-server">SERVER · YOUR ADK AGENT (:8080)</span>
+          </header>
+
+          <div class="a2-two-col">
+            <div class="a2-card">
+              <div class="a2-card-tag">SDK CONFIG</div>
+              <div class="a2-card-title">Culinary Catalog</div>
+              <p class="a2-card-desc">
+                <code>recipe_agent/catalog.py</code>: Custom cards (<code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, <code>DefaultCard</code>) derived on top of standard <code>BASIC_COMPONENTS</code>.
+              </p>
+            </div>
+            <div class="a2-card">
+              <div class="a2-card-tag">AGENT INPUT</div>
+              <div class="a2-card-title">Domain Tools &amp; Data</div>
+              <p class="a2-card-desc">
+                <code>recipe_agent/recipes.py</code>: <code>get_recipes()</code> with curated dishes (Carbonara, Pad Krapow, Quinoa Salad, Salmon), nutritional macros, and relative <code>/images/*.jpg</code>.
+              </p>
+            </div>
+          </div>
+
+          <!-- A2UI AGENT SDK BOUNDARY -->
+          <div class="a2-sdk-boundary">
+            <div class="a2-boundary-header">
+              <span class="a2-boundary-label">A2UI AGENT SDK (a2ui.adk)</span>
+              <span class="a2-boundary-langs">Python · ProtocolVersion.V1_0</span>
+            </div>
+            <div class="a2-two-col">
+              <div class="a2-card">
+                <div class="a2-card-title">A2uiInstruction &amp; Processor</div>
+                <p class="a2-card-desc">
+                  Compiles JSON Schema specs (~44 KB) directly from Pydantic catalog definitions and injects them into the Gemini system prompt.
+                </p>
+              </div>
+              <div class="a2-card">
+                <div class="a2-card-title">SendA2uiToClientToolset</div>
+                <p class="a2-card-desc">
+                  Validates A2UI v1.0 payloads against <code>RendererState(catalogs)</code> per turn; blocks schema hallucinations before emitting wire JSON.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="a2-two-col a2-flow-row" aria-hidden="true">
+            <span class="a2-flow-label">↓ generated A2UI skill &amp; tools</span>
+            <span class="a2-flow-label">↑ validated tool calls</span>
+          </div>
+
+          <!-- AGENT RUNTIME -->
+          <div class="a2-agent-box">
+            <div class="a2-agent-header">
+              <span class="a2-agent-title">Agent Code + Gemini LLM Runtime</span>
+              <span class="a2-agent-pill">recipe_agent/agent.py</span>
+            </div>
+            <p class="a2-card-desc">
+              Uses <strong>Gemini 3.5 Flash Lite</strong> (via Google ADK). Orchestrates <code>get_recipes</code>, selects appropriate UI cards, and sends structured output via <code>send_a2ui_json_to_client</code>.
+            </p>
+          </div>
+        </section>
+
+        <!-- ================= TRANSPORT ================= -->
+        <div class="a2-transport" aria-label="Transport Layer">
+          <div class="a2-transport-label">
+            <span class="a2-transport-title">TRANSPORT</span>
+            <span class="a2-transport-names">Vite Dev Proxy (:3000) ➔ ADK FastAPI Server (:8080) · POST /run</span>
+          </div>
+          <div class="a2-transport-chips">
+            <span class="a2-chip a2-chip-layout">↓ <code>createSurface</code></span>
+            <span class="a2-chip a2-chip-layout">↓ <code>updateComponents</code></span>
+            <span class="a2-chip a2-chip-data">↓ <code>updateDataModel</code></span>
+            <span class="a2-chip a2-chip-action">↑ <code>action (start_cooking, finish_cooking)</code></span>
+          </div>
+        </div>
+
+        <!-- ================= CLIENT ================= -->
+        <section class="a2-side" aria-label="Client: React App">
+          <header class="a2-side-header">
+            <span class="a2-side-badge a2-badge-client">CLIENT · YOUR REACT APP (:3000)</span>
+          </header>
+
+          <div class="a2-client-grid">
+            <!-- DEVICE MOCKUP -->
+            <figure class="a2-device-figure">
+              <div class="a2-device" role="img" aria-label="Phone preview of Culinary Assistant showing an A2UI surface">
+                <div class="a2-device-screen">
+                  <div class="a2-device-island"></div>
+                  <div class="a2-device-status">
+                    <span>9:41</span>
+                    <span>5G ▮▮▮</span>
+                  </div>
+
+                  <div class="a2-app-bar">
+                    <span>Culinary Assistant</span>
+                    <span class="a2-app-mode-pill">Custom Catalog</span>
+                  </div>
+
+                  <div class="a2-chat">
+                    <div class="a2-bubble a2-bubble-user">
+                      I have pasta, eggs, and bacon. What can I cook in 20 minutes?
+                    </div>
+                    <div class="a2-bubble a2-bubble-agent">
+                      Here is a classic authentic dinner from our kitchen:
+                    </div>
+
+                    <!-- A2UI RENDERED SURFACE -->
+                    <div class="a2-surface">
+                      <span class="a2-surface-tag">A2UI surface · culinaryCatalog</span>
+
+                      <!-- RECIPE SUMMARY CARD -->
+                      <div class="culinary-card-mockup">
+                        <div class="culinary-card-img-placeholder">🍝</div>
+                        <span class="culinary-badge">⏱ 20 mins</span>
+                        <div class="culinary-content">
+                          <div class="culinary-title">Authentic Spaghetti Carbonara</div>
+                          <div class="culinary-meta">
+                            <span>🔥 540 kcal</span>
+                            <span>•</span>
+                            <span>🍳 Intermediate</span>
+                            <span>•</span>
+                            <span>🇮🇹 Italian</span>
+                          </div>
+                          <div class="culinary-actions">
+                            <div class="btn-mock-view">View Details</div>
+                            <div class="btn-mock-cook">Let's Cook!</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- GUIDED COOKING STEP PREVIEW -->
+                      <div class="guided-mockup">
+                        <div class="guided-header">
+                          <span>STEP 2 OF 4</span>
+                          <span>BOIL PASTA</span>
+                        </div>
+                        <div class="guided-text">Boil spaghetti in generously salted water until al dente.</div>
+                        <div class="timer-strip">
+                          <span class="timer-clock">⏱ 08:00</span>
+                          <span class="timer-btn">▶ Start Timer</span>
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+
+                  <div class="a2-device-home"></div>
+                </div>
+              </div>
+              <figcaption class="a2-device-caption">Live React Surface Preview</figcaption>
+            </figure>
+
+            <!-- LEGEND -->
+            <div class="a2-legend">
+              <div class="a2-legend-item a2-legend-app">
+                <div class="a2-legend-title">Your App (App.tsx &amp; adkService.ts)</div>
+                <p class="a2-card-desc">
+                  Manages chat sessions, messages, 3-way stage toggle (<strong>Plain</strong> vs <strong>Default</strong> vs <strong>Custom</strong>), and delegates actions.
+                </p>
+              </div>
+
+              <div class="a2-legend-item a2-legend-renderer">
+                <div class="a2-boundary-header">
+                  <span class="a2-boundary-label">A2UI RENDERER (A2UIRenderer.tsx)</span>
+                </div>
+                <span class="a2-boundary-langs">@a2ui/react · @a2ui/web_core · culinaryCatalog</span>
+                <p class="a2-card-desc">
+                  Maps flat JSON component definitions to native Tailwind React widgets.
+                  Enforces strict catalog validation (rejects basicCatalog).
+                </p>
+              </div>
+
+              <div class="a2-legend-item a2-card">
+                <div class="a2-card-title" style="color:#f59e0b;">Local Reactivity vs. Agent Actions</div>
+                <p class="a2-card-desc">
+                  • <strong>Local Reactivity:</strong> Timer countdown and Next/Previous carousel run locally in React with zero network latency.<br/>
+                  • <strong>Agent Actions:</strong> "View Details" or "Finish Cooking" dispatches follow-up prompts to the ADK agent.
+                </p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- DETAILED WALKTHROUGH -->
+    <section>
+      <h2>Step-by-Step Culinary Pipeline Execution</h2>
+      <p>
+        Here is how a request like <em>"I have pasta and eggs, what can I make?"</em> moves through our system from catalog definition to the live native React UI:
+      </p>
+
+      <!-- STEP 1 -->
+      <h3>1. Define the Catalog (recipe_agent/catalog.py)</h3>
+      <p>
+        We declare custom Pydantic components derived from <code>ComponentCommon</code>, grouped under <code>CULINARY_CATALOG_ID</code>.
+      </p>
+      <div class="code-window">
+        <div class="code-bar">
+          <span class="code-title">recipe_agent/catalog.py (Backend Pydantic)</span>
+        </div>
+        <pre><code><span class="token-kwd">class</span> <span class="token-prop">RecipeSummaryCardComponent</span>(ComponentCommon):
+    recipeId: Optional[<span class="token-kwd">str</span>] = <span class="token-kwd">None</span>
+    name: DynamicString = Field(description=<span class="token-str">"Title of the recipe"</span>)
+    prepTime: Optional[DynamicString] = <span class="token-kwd">None</span>
+    cookTime: Optional[DynamicString] = <span class="token-kwd">None</span>
+    calories: Optional[DynamicString] = <span class="token-kwd">None</span>
+    imageUrl: Optional[DynamicString] = Field(description=<span class="token-str">"Relative URL e.g. /images/carbonara.jpg"</span>)
+
+<span class="token-kwd">def</span> <span class="token-prop">create_culinary_catalog</span>() -&gt; Catalog:
+    <span class="token-kwd">return</span> Catalog(
+        catalogId=CULINARY_CATALOG_ID,
+        components=<span class="token-kwd">list</span>(BASIC_COMPONENTS) + CULINARY_COMPONENTS,
+        functions=create_basic_catalog_functions(),
+    )</code></pre>
+      </div>
+
+      <!-- STEP 2 -->
+      <h3>2. Generate the Skill &amp; Instructions</h3>
+      <p>
+        <code>A2uiRequestProcessor</code> compiles ~44 KB of JSON Schemas directly from <code>create_culinary_catalog()</code> and wraps them into <code>A2uiInstruction</code>.
+      </p>
+
+      <!-- STEP 3 & 4 -->
+      <h3>3. Tool Execution &amp; Backend Validation</h3>
+      <p>
+        The agent calls <code>get_recipes()</code> to retrieve authentic recipes. Then Gemini calls <code>send_a2ui_json_to_client</code> with the A2UI v1.0 JSON payload.
+        <code>create_turn_processor()</code> binds a fresh <code>RendererState(catalogs)</code> on every turn, enforcing that every response contains its own self-contained <code>createSurface</code>.
+      </p>
+
+      <!-- STEP 5 -->
+      <h3>4. Messages on the Wire (A2UI v1.0 JSON)</h3>
+      <p>The client receives strict A2UI v1.0 messages inside the tool response:</p>
+      <div class="code-window">
+        <div class="code-bar">
+          <span class="code-title">validated_a2ui_json (Wire Protocol)</span>
+        </div>
+        <pre><code>[
+  {
+    <span class="token-prop">"createSurface"</span>: {
+      <span class="token-prop">"surfaceId"</span>: <span class="token-str">"recipe_catalog_surface_carbonara"</span>,
+      <span class="token-prop">"catalogId"</span>: <span class="token-str">"https://a2ui.org/specification/v1_0/catalogs/culinary/catalog.json"</span>
+    }
+  },
+  {
+    <span class="token-prop">"updateComponents"</span>: {
+      <span class="token-prop">"surfaceId"</span>: <span class="token-str">"recipe_catalog_surface_carbonara"</span>,
+      <span class="token-prop">"components"</span>: [
+        {
+          <span class="token-prop">"id"</span>: <span class="token-str">"card_1"</span>,
+          <span class="token-prop">"component"</span>: <span class="token-str">"RecipeSummaryCard"</span>,
+          <span class="token-prop">"recipeId"</span>: <span class="token-str">"pasta-carbonara"</span>,
+          <span class="token-prop">"name"</span>: <span class="token-str">"Authentic Spaghetti Carbonara"</span>,
+          <span class="token-prop">"cookTime"</span>: <span class="token-str">"20 mins"</span>,
+          <span class="token-prop">"calories"</span>: <span class="token-str">"540 kcal"</span>,
+          <span class="token-prop">"imageUrl"</span>: <span class="token-str">"/images/carbonara.jpg"</span>
+        }
+      ]
+    }
+  }
+]</code></pre>
+      </div>
+
+      <!-- STEP 6 -->
+      <h3>5. Client-Side Rendering (frontend/src/catalog/culinaryCatalog.tsx)</h3>
+      <p>
+        The frontend registers matching Zod schemas and binds React components via <code>createComponentImplementation</code>.
+      </p>
+
+      <!-- STEP 7 -->
+      <h3>6. Handling User Actions (Local vs. Agent Actions)</h3>
+      <div class="callout">
+        <div class="callout-title">Architectural Invariant: Single-Card Cooking Bundling</div>
+        <div class="callout-body">
+          In <code>GuidedCookingCard.tsx</code>, all cooking steps are sent at once. The user can click <strong>Next / Previous</strong> or start the <strong>CookingTimer</strong> locally without any LLM latency or network requests! Clicking <strong>"Finish Cooking"</strong> dispatches an agent action to celebrate and plan dessert.
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <span>Antigravity ADK + A2UI v1.0 Recipe Assistant</span>
+      <span>Port :3000 (Vite) ➔ Port :8080 (ADK)</span>
+    </footer>
+
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const root = document.documentElement;
+      const current = root.getAttribute('data-theme');
+      const next = current === 'light' ? 'dark' : 'light';
+      root.setAttribute('data-theme', next);
+    }
+  </script>
+</body>
+</html>

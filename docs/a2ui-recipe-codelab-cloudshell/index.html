@@ -111,7 +111,7 @@
                               ▼
                  +──────────────────────────+
                  |  Gemini 3.5 Flash-Lite   |
-                 |       (Gemini API)       |
+                 |    (Google AI Studio)    |
                  +──────────────────────────+
                               │
                Calls Tool: get_recipes() (Grounded)
@@ -132,7 +132,7 @@
 <ul class="checklist">
 <li>How to set up and run Python ADK and Node.js React workflows inside <strong>Google Cloud Shell</strong>.</li>
 <li>How to access development servers using Cloud Shell&#39;s built-in <strong>Web Preview</strong> feature.</li>
-<li>How to ground an ADK agent using Gemini with a <strong>Gemini API Key</strong>.</li>
+<li>How to ground an ADK agent using Gemini with a <strong>Google AI Studio API Key</strong>.</li>
 <li>How A2UI works: the <strong>v1.0 specification</strong>, the flat component model, top-down root ordering, and lifecycle messages (<code>createSurface</code>, <code>updateComponents</code>, <code>updateDataModel</code>, <code>deleteSurface</code>).</li>
 <li>How to enforce backend A2UI schema validation and LLM self-correction with <code>SendA2uiToClientToolset</code>.</li>
 <li>How to design custom A2UI components (<code>RecipeSummaryCard</code>, <code>RecipeDetailCard</code>, <code>GuidedCookingCard</code>, <code>DefaultCard</code>).</li>
@@ -144,10 +144,19 @@
     
       <google-codelab-step label="2. Set up your Google Cloud Shell Environment" duration="5">
         <p><strong>Google Cloud Shell</strong> is a browser-based computing environment pre-authenticated with your Google Cloud account. It comes pre-installed with <code>gcloud</code>, <code>git</code>, <code>python3</code>, <code>node</code>, and <code>npm</code>.</p>
-<h2 is-upgraded>2.1 Select Your Google Cloud Project and Open Cloud Shell</h2>
+<h2 is-upgraded>2.1 Prerequisite: Create a Project and API Key via Google AI Studio</h2>
+<p>Before launching Cloud Shell, create your project and Gemini API key directly from Google AI Studio:</p>
+<ol type="1">
+<li>Navigate to <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio Get API Key</a>.</li>
+<li>Click the <strong>Create API key</strong> button.</li>
+<li>In the dialog, select <strong>Create API key in new project</strong>. Google AI Studio will automatically provision a new Google Cloud project for you and create an API key enabled for the Generative Language API.</li>
+<li>Copy the generated API key (you will paste it into your <code>.env</code> file in Step 2.7).</li>
+<li>Note down the name or <strong>Project ID</strong> of the newly created project (displayed in the API keys table).</li>
+</ol>
+<h2 is-upgraded>2.2 Select Your Google Cloud Project and Open Cloud Shell</h2>
 <ol type="1">
 <li>Navigate to the <a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>.</li>
-<li>In the top navigation bar, click the <strong>Project drop-down</strong> and select (or create) the Google Cloud Project you will use for this codelab. Note down your <strong>Project ID</strong>.</li>
+<li>In the top navigation bar, click the <strong>Project drop-down</strong> and select the Google Cloud project created by Google AI Studio in Step 2.1. Note down your <strong>Project ID</strong>.</li>
 <li>Click the <strong>Activate Cloud Shell</strong> icon (<code>>_</code>) in the upper-right corner of the console toolbar:</li>
 </ol>
 <p><em>Screenshot: </em><a href="https://cloud.google.com/static/shell/docs/images/cloud-shell-toolbar.png" target="_blank"><em>Google Cloud Shell</em></a></p>
@@ -156,38 +165,35 @@
 </code></pre>
 <em>(Replace </em><em><code>YOUR_PROJECT_ID</code></em><em> with your actual Project ID).</em></li>
 </ol>
-<h2 is-upgraded>2.2 Verify Installed Tooling</h2>
+<h2 is-upgraded>2.3 Verify Installed Tooling</h2>
 <p>Run the following in Cloud Shell to verify Python and Node versions:</p>
 <pre><code language="language-bash" class="language-bash">python3 --version   # Python 3.10+ (or 3.11/3.12)
 node --version      # v18+ or v20+
 npm --version
 </code></pre>
-<h2 is-upgraded>2.3 Clone or Navigate to the Codebase</h2>
+<h2 is-upgraded>2.4 Clone or Navigate to the Codebase</h2>
 <p>If cloning from your git repository in Cloud Shell, checkout the starter <code>stage0</code> branch:</p>
 <pre><code language="language-bash" class="language-bash">git clone https://github.com/shangyilim/a2uirecipe.git
 cd a2uirecipe
 git checkout stage0
 </code></pre>
-<h2 is-upgraded>2.4 Set Up Python Virtual Environment</h2>
+<h2 is-upgraded>2.5 Set Up Python Virtual Environment</h2>
 <p>Cloud Shell manages packages best within a virtual environment. Create and activate <code>.venv</code>:</p>
 <pre><code language="language-bash" class="language-bash">python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install google-adk a2ui-agent-sdk a2ui-adk
 </code></pre>
-<h2 is-upgraded>2.5 Open Google Cloud Shell Editor</h2>
+<h2 is-upgraded>2.6 Open Google Cloud Shell Editor</h2>
 <p>To easily explore and edit files throughout this codelab, open the Cloud Shell built-in code editor:</p>
 <ol type="1">
 <li>In the upper-right toolbar of Cloud Shell, click <strong>Open Editor</strong> (the pencil icon):<em>Screenshot: </em><a href="https://cloud.google.com/static/shell/docs/images/open-editor.png" target="_blank"><em>Cloud Shell Editor Button</em></a></li>
 <li>The browser-based Cloud Shell Editor (based on VS Code / Theia) will open in a split pane above the terminal.</li>
 <li>In the left file explorer sidebar, expand the <code>a2uirecipe</code> directory to inspect the project layout, source code, and configuration files.</li>
 </ol>
-<h2 is-upgraded>2.6 Create and Configure <code>.env</code> in Cloud Shell Editor</h2>
-<p>To call Gemini, generate an API key using <code>gcloud</code> and configure your environment file directly in Cloud Shell Editor:</p>
+<h2 is-upgraded>2.7 Create and Configure <code>.env</code> in Cloud Shell Editor</h2>
+<p>Configure your environment file directly in Cloud Shell Editor using the Gemini API key created in Step 2.1:</p>
 <ol type="1">
-<li><strong>Generate your Gemini API Key</strong>: Run the following command in the Cloud Shell terminal:<pre><code language="language-bash" class="language-bash">gcloud services api-keys create --display-name=&#34;Gemini API Key&#34; --api-target=service=generativelanguage.googleapis.com --format=&#34;value(response.keyString)&#34;
-</code></pre>
-Copy the generated API key string from the command output.</li>
 <li><strong>Create </strong><strong><code>.env</code></strong><strong> in Cloud Shell Editor</strong>:<ul>
 <li>In the Cloud Shell Editor file explorer sidebar, expand <code>a2uirecipe</code> &gt; <code>recipe_agent</code>.</li>
 <li>Right-click the <code>recipe_agent</code> folder and select <strong>New File</strong>.</li>
@@ -198,7 +204,7 @@ Copy the generated API key string from the command output.</li>
 <li><strong>Paste your API credentials</strong>: In the editor, paste the following into your newly created <code>recipe_agent/.env</code>:<pre><code language="language-bash" class="language-bash">GEMINI_API_KEY=your_actual_gemini_api_key_here
 RECIPE_STAGE=1
 </code></pre>
-Replace <code>your_actual_gemini_api_key_here</code> with your copied Gemini API key and save the file (<strong>Ctrl+S</strong> or <strong>Cmd+S</strong>).</li>
+Replace <code>your_actual_gemini_api_key_here</code> with your copied Gemini API key from Step 2.1 and save the file (<strong>Ctrl+S</strong> or <strong>Cmd+S</strong>).</li>
 </ol>
 
 
@@ -635,7 +641,7 @@ root_agent = Agent(
 </li>
 <li><strong><code>frontend/src/services/adkService.ts</code></strong><strong> &amp; </strong><strong><code>frontend/src/App.tsx</code></strong>: <ul>
 <li><code>adkService.ts</code> extracts <code>part.functionResponse.response.validated_a2ui_json</code> emitted by <code>SendA2uiToClientToolset</code> (with <code><a2ui-json></code> / raw JSON block fallback) and preserves <code>rawMessages</code> alongside <code>surfaceState</code>.</li>
-<li><code>App.tsx</code> provides a header toggle (<strong><code>Default (@a2ui/react)</code></strong> vs. <strong><code>Custom Catalog</code></strong>) and renders <code><DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} /></code> when Default mode is active.</li>
+<li><code>App.tsx</code> provides a header toggle (<strong><code>Plain Text</code></strong>, <strong><code>Default (@a2ui/react)</code></strong>, and <strong><code>Custom Catalog</code></strong>) and renders <code><DefaultA2UIRenderer messages={msg.rawMessages} onAction={handleAction} /></code> when Default mode is active.</li>
 </ul>
 </li>
 </ol>
@@ -1305,7 +1311,7 @@ npm run build
       <google-codelab-step label="11. Summary &amp; Checklist" duration="1">
         <p>Congratulations! You built and ran a full-stack, AI-powered interactive recipe assistant inside <strong>Google Cloud Shell</strong> using <strong>ADK</strong> and <strong>A2UI</strong>.</p>
 <ul>
-<li>[x] <strong>Cloud Shell Environment</strong>: Configured Python venv, Node.js, and Gemini API credentials.</li>
+<li>[x] <strong>Cloud Shell Environment</strong>: Configured Python venv, Node.js, and Google AI Studio credentials.</li>
 <li>[x] <strong>Stage 1</strong>: Created a grounded agent retrieving recipe data without hallucination.</li>
 <li>[x] <strong>Stage 2</strong>: Used <code>a2ui-agent-sdk</code> to generate prompts guiding Gemini to output structured A2UI v1.0 JSON.</li>
 <li>[x] <strong>Stage 3</strong>: Rendered the Default A2UI Catalog on the client using <code>@a2ui/react</code> and <code>@a2ui/web_core</code>, styled with CSS custom properties.</li>
